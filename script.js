@@ -104,7 +104,8 @@ function tick(){
  if(view==="trip")paint();
 }
 const CITY={Paris:[48.9,2.35],Delhi:[28.6,77.2],"New York":[40.7,-74],Tokyo:[35.7,139.7],Dubai:[25.2,55.3],Sydney:[-33.9,151.2],London:[51.5,-0.1],Amsterdam:[52.4,4.9],Milan:[45.5,9.2],Brussels:[50.8,4.4],Barcelona:[41.4,2.2],Berlin:[52.5,13.4],Home:[48.85,2.3],Library:[48.9,2.4]};
-function pt(n){if(CITY[n])return CITY[n];const k=CT.find(c=>c[0]===n);if(k)return [k[2],k[3]];let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%1000;return [(h%120)-50,((h*7)%300)-150]}
+const XY={};
+function pt(n){if(XY[n])return XY[n];if(CITY[n])return CITY[n];const k=CT.find(c=>c[0]===n);if(k)return [k[2],k[3]];let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%1000;return [(h%120)-50,((h*7)%300)-150]}
 const LAND0=["-168,66 -140,70 -95,72 -80,68 -62,58 -55,48 -70,42 -76,35 -81,25 -97,26 -97,20 -88,16 -83,9 -92,14 -105,20 -117,32 -124,40 -125,49 -135,58 -165,60","-80,8 -62,10 -50,0 -35,-6 -40,-22 -48,-28 -58,-38 -66,-46 -70,-54 -74,-48 -72,-30 -77,-12 -81,-5","-10,36 -9,43 -2,48 -5,50 5,53 8,58 5,62 15,69 30,71 60,70 100,77 140,72 170,68 180,66 165,60 160,52 142,52 140,45 130,42 122,40 122,30 120,22 108,20 106,10 100,13 98,8 104,1 98,16 92,22 88,22 80,14 77,8 72,20 66,25 57,26 50,30 48,27 56,24 59,22 52,16 43,13 35,28 36,36 27,37 26,41 20,40 12,42 16,38 8,44 3,42 -2,37","-17,21 -10,35 10,37 32,31 35,28 43,12 51,12 40,-3 40,-15 33,-26 20,-35 12,-17 9,-1 8,4 -8,4 -17,14","114,-22 122,-18 136,-12 142,-11 146,-19 153,-26 150,-37 140,-38 130,-32 115,-34","-55,60 -45,60 -20,70 -20,82 -60,82 -70,76","-5,50 1,51 -2,56 -5,58 -6,55","130,31 135,34 141,38 142,45 140,42 133,35"];
 const proj=s=>s.split(" ").map(p=>{const [lo,la]=p.split(",");return (+lo+180)+","+(90-la)}).join(" ");
 let MAP={},DOTS="";
@@ -147,17 +148,44 @@ const ALIAS={burma:"myanmar","czech republic":"czechia","cote d'ivoire":"ivory c
 const flag=cc=>String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0)));
 // Windows Chrome shows flag emoji as two letters, so draw flags as small images instead.
 const fi=f=>{const a=[...(f||"")].map(c=>c.codePointAt(0));if(a.length===2&&a.every(x=>x>=127462&&x<=127487)){const cc=a.map(x=>String.fromCharCode(x-127397)).join("").toLowerCase();return `<img class="flag" src="https://flagcdn.com/w40/${cc}.png" srcset="https://flagcdn.com/w80/${cc}.png 2x" alt="${cc.toUpperCase()}" onerror="this.replaceWith(document.createTextNode(this.alt))">`}return f||""};
+// ---------- where you are now: after you land somewhere, new trips start from there ----------
+const HOME={b:"Paris",c:"France",f:"🇫🇷"};
+const here=()=>S.at||HOME;
+const cn=c=>({UK:"United Kingdom",UAE:"United Arab Emirates"})[c]||c;
+const dkm=(p,q)=>{const D=Math.PI/180,h=x=>Math.sin(x/2)**2,a=h((q[0]-p[0])*D)+Math.cos(p[0]*D)*Math.cos(q[0]*D)*h((q[1]-p[1])*D);return 12742*Math.asin(Math.sqrt(a))};
+let RTkey="",RT=R;
+function routes(){
+ const k=S.at?S.at.b+"|"+S.at.c:"";
+ if(k===RTkey)return RT;
+ RTkey=k;delete XY.Hotel;delete XY.Library;
+ if(!S.at){RT=R;return RT}
+ const h=S.at,o=pt(h.b),spd={Flight:[850,30],Train:[130,30],Bus:[70,30]},lim={Train:1500,Bus:1200};
+ const pool=R.filter(r=>r.k!=="Short hop");
+ for(const [m,kk] of [["✈️","Flight"],["🚆","Train"],["🚌","Bus"]])pool.push({m,k:kk,b:HOME.b,c:HOME.c,f:HOME.f});
+ const out=[];
+ for(const r of pool){
+  if(cn(r.c)===cn(h.c))continue;
+  const km=dkm(o,pt(r.b));
+  if(lim[r.k]&&km>lim[r.k])continue;
+  out.push({...r,a:h.b,min:Math.max(25,Math.round(km/spd[r.k][0]*60+spd[r.k][1]))});
+ }
+ XY.Hotel=o;XY.Library=[o[0]+.1,o[1]+.1];
+ out.push({m:"🚲",k:"Short hop",a:"Hotel",b:"Library",c:h.c,f:h.f,min:25});
+ RT=out;return RT;
+}
+function pickRoute(){const L=routes();return L.find(r=>r.k===mode)||{c:"",k:mode,min:0}}
 const findC=s=>{s=(s||"").trim().toLowerCase();s=ALIAS[s]||s;return CT.find(c=>c[0].toLowerCase()===s)};
-function est(c){const D=Math.PI/180,[la,lo]=CITY.Paris,h=(x)=>Math.sin(x/2)**2,dl=(c[2]-la)*D,dn=(c[3]-lo)*D;const a=h(dl)+Math.cos(la*D)*Math.cos(c[2]*D)*h(dn);const km=12742*Math.asin(Math.sqrt(a));return Math.max(25,Math.round(km/850*60+30))}
+function est(c){const D=Math.PI/180,[la,lo]=pt(here().b),h=(x)=>Math.sin(x/2)**2,dl=(c[2]-la)*D,dn=(c[3]-lo)*D;const a=h(dl)+Math.cos(la*D)*Math.cos(c[2]*D)*h(dn);const km=12742*Math.asin(Math.sqrt(a));return Math.max(25,Math.round(km/850*60+30))}
 let note="",fix=0,ccIn="";
 function board(force){
  subject=$("#sj").value;
  const q=findC($("#cc").value),m=+$("#cm").value;custom=$("#cm").value;ccIn=$("#cc").value;
  if(!q){note="Pick a country from the list so the flight time can be checked.";fix=0;return render()}
+ if(cn(q[0])===cn(here().c)){note=`You’re already in ${q[0]}. Pick a different country.`;fix=0;return render()}
  if(!m||m<1){note="Enter how many minutes you want to study.";fix=0;return render()}
  const e=est(q);
- if(!force&&Math.abs(m-e)>Math.max(e*.3,15)){note=`Paris to ${q[0]} takes about ${hm(e)} by plane. You entered ${hm(m)}.`;fix=e;return render()}
- Object.assign(sel,{c:q[0],b:q[0],f:flag(q[1]),min:m});note="";fix=0;start();
+ if(!force&&Math.abs(m-e)>Math.max(e*.3,15)){note=`${here().b} to ${q[0]} takes about ${hm(e)} by plane. You entered ${hm(m)}.`;fix=e;return render()}
+ Object.assign(sel,{a:here().b,c:q[0],b:q[0],f:flag(q[1]),min:m});note="";fix=0;start();
 }
 let LP={},G={lo:0,la:0},GP=0,GR=270;
 const SEAS=["47,45 50,47 53,46.5 53,44 51,42 52.5,40 53.8,37 51,36.7 49,38 49,40 48,41.5 47.5,43"];
@@ -255,12 +283,14 @@ function land(){
  chime();document.title="Landed! ✈️ · Study Flight";
  const st=S.stamps[c]||{n:0,min:0,f:r.f,last:""};
  st.n++;st.min+=Math.round(J.done/60000);st.last=new Date().toLocaleDateString();st.f=r.f;
+ if(r.k!=="Short hop"){S.at=(r.b===HOME.b&&r.c===HOME.c)?null:{b:r.b,c:r.c,f:r.f}}
  S.stamps[c]=st;S.dly=(S.dly||0)+(J.delay>0?1:0);S.tdl=(S.tdl||0)+Math.round(J.delay/60000);save();
- arrived={r,delay:J.delay,pauses:J.pauses};J=null;clearTrip();view="trip";render();
+ arrived={r,delay:J.delay,pauses:J.pauses};J=null;sel=pickRoute();clearTrip();view="trip";render();
 }
 function abandon(){if(confirm("Cancel this trip? You won’t earn a stamp.")){J=null;clearTrip();view="plan";render()}}
 
 function render(){
+ routes();
  if(!J&&!arrived)document.title="Study Flight";
  document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-current",b.dataset.v===view));
  const a=$("#app");
@@ -271,10 +301,12 @@ function render(){
 }
 function plan(){
  const modes=["Flight","Train","Bus","Short hop","Custom"];
- const list=mode==="Custom"?"":R.filter(r=>r.k===mode).map(r=>`<button class="route" data-r="${R.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${fi(r.f)} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
+ const RL=routes(),h=here();
+ const rows=RL.filter(r=>r.k===mode);
+ const list=mode==="Custom"?"":(rows.length?"":`<p class="sub">No ${esc(mode.toLowerCase())} routes from ${esc(h.b)} are close enough. Try a flight or a custom trip.</p>`)+rows.map(r=>`<button class="route" data-r="${RL.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${fi(r.f)} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
  const cu=mode==="Custom"?`<div class="pass"><div class="in"><label for="cm">Study length in minutes</label><input id="cm" type="number" min="1" inputmode="numeric" value="${esc(custom)}"><label for="cc">Destination country</label><input id="cc" list="cl" autocomplete="off" value="${esc(ccIn)}" placeholder="e.g. Brazil"><datalist id="cl">${CT.map(c=>`<option value="${c[0]}">`).join("")}</datalist>${note?`<div class="crew" role="alert" style="margin:12px 0 0">${esc(note)}${fix?`<div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-fix="1">Use ${hm(fix)}</button><button class="btn alt" data-keep="1">Keep mine</button></div>`:""}</div>`:""}</div></div>`:"";
  const fr=sel.c&&!(mode==="Custom"&&!sel.c)?`<label for="fr">Friend in ${esc(sel.c)}</label><input id="fr" value="${esc(S.friends[sel.c]||"")}" placeholder="Name of the friend you’ll visit">`:"";
- return `<h1>Where to next?</h1><p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>
+ return `<h1>Where to next?</h1><p class="sub">📍 You’re in <b>${fi(h.f)} ${esc(h.b)}</b>${S.at?` <button class="btn alt" data-home="1" style="width:auto;padding:4px 10px;font-size:13px;margin-left:6px">Back to ${HOME.b}</button>`:""}</p><p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>
  <div class="tabs" role="group" aria-label="Transport">${modes.map(m=>`<button data-m="${m}" aria-pressed="${m===mode}">${m==="Flight"?"✈️":m==="Train"?"🚆":m==="Bus"?"🚌":m==="Short hop"?"🚲":"🧭"}<br>${m}</button>`).join("")}</div>
  ${list}${cu}
  <div class="pass"><div class="in"><label for="sj">What are you studying?</label><input id="sj" value="${esc(subject)}" placeholder="e.g. Organic chemistry">${fr}</div></div>
@@ -324,8 +356,9 @@ function pass(){
  ${acct()}`;
 }
 function bind(){
- document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{mode=b.dataset.m;sel=mode==="Custom"?{custom:1,m:"🧭",k:"Custom",a:"Home",b:"Destination",c:"",f:"🌍",min:0}:R.find(r=>r.k===mode);render()});
- document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{subject=$("#sj").value;sel=R[+b.dataset.r];render()});
+ document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{mode=b.dataset.m;sel=mode==="Custom"?{custom:1,m:"🧭",k:"Custom",a:here().b,b:"Destination",c:"",f:"🌍",min:0}:pickRoute();render()});
+ document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{subject=$("#sj").value;sel=routes()[+b.dataset.r];render()});
+ const hm0=$("[data-home]");if(hm0)hm0.onclick=()=>{subject=$("#sj").value;S.at=null;save();sel=pickRoute();render()};
  const go=$("#go");if(go)go.onclick=()=>{
   subject=$("#sj").value;
   if(sel.custom){board(false);return}
@@ -352,5 +385,6 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
 function clearTrip(){try{localStorage.removeItem("sj_trip")}catch(e){}}
 try{const t=JSON.parse(localStorage.getItem("sj_trip")||"null");if(t&&t.r&&t.total){J=t;if(!J.paused){J.paused=true;J.pausedAt=J.last||Date.now();J.pauses++}view="trip"}}catch(e){}
 setInterval(tick,500);
+routes();sel=routes()[0]||sel;
 render();
 if(ACC)pull();
