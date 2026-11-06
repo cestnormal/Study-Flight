@@ -145,6 +145,8 @@ const CT="France,FR,48.9,2.35;United Kingdom,GB,51.5,-0.1;Ireland,IE,53.3,-6.3;S
 CT.sort((a,b)=>a[0].localeCompare(b[0]));
 const ALIAS={burma:"myanmar","czech republic":"czechia","cote d'ivoire":"ivory coast","côte d’ivoire":"ivory coast",drc:"democratic republic of the congo",congo:"republic of the congo",swaziland:"eswatini",turkiye:"turkey",holland:"netherlands",korea:"south korea","east timor":"timor-leste",vatican:"vatican city","cape verde":"cabo verde",uk:"united kingdom",england:"united kingdom","united states":"usa",us:"usa",america:"usa",uae:"united arab emirates",dubai:"united arab emirates"};
 const flag=cc=>String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0)));
+// Windows Chrome shows flag emoji as two letters, so draw flags as small images instead.
+const fi=f=>{const a=[...(f||"")].map(c=>c.codePointAt(0));if(a.length===2&&a.every(x=>x>=127462&&x<=127487)){const cc=a.map(x=>String.fromCharCode(x-127397)).join("").toLowerCase();return `<img class="flag" src="https://flagcdn.com/w40/${cc}.png" srcset="https://flagcdn.com/w80/${cc}.png 2x" alt="${cc.toUpperCase()}" onerror="this.replaceWith(document.createTextNode(this.alt))">`}return f||""};
 const findC=s=>{s=(s||"").trim().toLowerCase();s=ALIAS[s]||s;return CT.find(c=>c[0].toLowerCase()===s)};
 function est(c){const D=Math.PI/180,[la,lo]=CITY.Paris,h=(x)=>Math.sin(x/2)**2,dl=(c[2]-la)*D,dn=(c[3]-lo)*D;const a=h(dl)+Math.cos(la*D)*Math.cos(c[2]*D)*h(dn);const km=12742*Math.asin(Math.sqrt(a));return Math.max(25,Math.round(km/850*60+30))}
 let note="",fix=0,ccIn="";
@@ -269,7 +271,7 @@ function render(){
 }
 function plan(){
  const modes=["Flight","Train","Bus","Short hop","Custom"];
- const list=mode==="Custom"?"":R.filter(r=>r.k===mode).map(r=>`<button class="route" data-r="${R.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${r.f} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
+ const list=mode==="Custom"?"":R.filter(r=>r.k===mode).map(r=>`<button class="route" data-r="${R.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${fi(r.f)} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
  const cu=mode==="Custom"?`<div class="pass"><div class="in"><label for="cm">Study length in minutes</label><input id="cm" type="number" min="1" inputmode="numeric" value="${esc(custom)}"><label for="cc">Destination country</label><input id="cc" list="cl" autocomplete="off" value="${esc(ccIn)}" placeholder="e.g. Brazil"><datalist id="cl">${CT.map(c=>`<option value="${c[0]}">`).join("")}</datalist>${note?`<div class="crew" role="alert" style="margin:12px 0 0">${esc(note)}${fix?`<div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-fix="1">Use ${hm(fix)}</button><button class="btn alt" data-keep="1">Keep mine</button></div>`:""}</div>`:""}</div></div>`:"";
  const fr=sel.c&&!(mode==="Custom"&&!sel.c)?`<label for="fr">Friend in ${esc(sel.c)}</label><input id="fr" value="${esc(S.friends[sel.c]||"")}" placeholder="Name of the friend you’ll visit">`:"";
  return `<h1>Where to next?</h1><p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>
@@ -280,13 +282,13 @@ function plan(){
 }
 function trip(){
  if(arrived){const r=arrived.r,fr=S.friends[r.c];
-  return `<div class="modal"><div class="pass"><div class="in"><div class="land">${r.f}</div><h1>Landed in ${esc(r.b)}</h1><div class="slam">ARRIVED</div>
+  return `<div class="modal"><div class="pass"><div class="in"><div class="land">${fi(r.f)}</div><h1>Landed in ${esc(r.b)}</h1><div class="slam">ARRIVED</div>
   <p>You studied ${hm(r.min)} by ${r.k.toLowerCase()}${arrived.pauses?`, with ${arrived.pauses} pause${arrived.pauses>1?"s":""} and ${Math.round(arrived.delay/60000)} min of delay`:" with zero delays"}.</p>
   <p><b>${r.c} stamp added to your passport.</b></p>
   ${fr?`<p>🤝 ${esc(fr)} is waiting at arrivals.</p>`:`<p class="sub">Add a friend in ${esc(r.c)} from your passport.</p>`}
   ${(()=>{const c=crew(false);return c?`<div class="crew" style="text-align:left">👩‍✈️ ${esc(c)}</div>`:""})()}<button class="btn" id="ok">Plan next trip</button></div></div></div>`}
  if(!J)return `<h1>No trip in progress</h1><p class="sub">Check in to a trip first.</p><button class="btn" data-go="plan">Choose a trip</button>`;
- return `<h1>${J.r.m} ${esc(J.r.a)} to ${esc(J.r.b)}</h1><p class="sub">${J.subject?esc(J.subject)+" · ":""}${J.r.f} ${esc(J.r.c)}${S.friends[J.r.c]?" · "+esc(S.friends[J.r.c])+" is waiting":""}</p>
+ return `<h1>${J.r.m} ${esc(J.r.a)} to ${esc(J.r.b)}</h1><p class="sub">${J.subject?esc(J.subject)+" · ":""}${fi(J.r.f)} ${esc(J.r.c)}${S.friends[J.r.c]?" · "+esc(S.friends[J.r.c])+" is waiting":""}</p>
  <div class="pass"><div class="in">
  <div class="row"><span id="st"></span><span id="eta"></span></div>
  <canvas id="globe" width="600" height="600" role="img" aria-label="Globe showing your flight" style="width:100%;aspect-ratio:1;display:block;margin-top:12px;border-radius:12px;background:#0a1626;touch-action:none;cursor:grab"></canvas><div class="row" style="margin-top:8px"><small style="color:var(--mute)">Drag to rotate the globe</small><button class="btn alt" id="rc" style="width:auto;padding:6px 12px;font-size:14px">Recenter</button></div>
@@ -316,9 +318,9 @@ function pass(){
  const cs=Object.keys(S.stamps),tot=Object.values(S.stamps).reduce((a,s)=>a+s.min,0),trips=Object.values(S.stamps).reduce((a,s)=>a+s.n,0);
  const all=[...new Set([...R.map(r=>r.c),...cs])];
  return `<h1>Passport</h1><p class="sub">${cs.length} countr${cs.length===1?"y":"ies"} · ${trips} trip${trips===1?"":"s"} · ${hm(tot)} studied</p>
- ${cs.length?`<div class="stamps">${cs.map(c=>`<div class="stamp"><span class="f">${S.stamps[c].f}</span><b>${esc(c)}</b><small>${S.stamps[c].n} visit${S.stamps[c].n>1?"s":""} · ${hm(S.stamps[c].min)}</small><small>${esc(S.stamps[c].last)}</small></div>`).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
+ ${cs.length?`<div class="stamps">${cs.map(c=>`<div class="stamp"><span class="f">${fi(S.stamps[c].f)}</span><b>${esc(c)}</b><small>${S.stamps[c].n} visit${S.stamps[c].n>1?"s":""} · ${hm(S.stamps[c].min)}</small><small>${esc(S.stamps[c].last)}</small></div>`).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
  <h1 style="font-size:20px;margin-top:22px">Friends abroad</h1><p class="sub">One friend per country. They’ll greet you when you land.</p>
- <div class="pass"><div class="in">${all.map(c=>`<label for="f-${esc(c)}">${(R.find(r=>r.c===c)||{f:S.stamps[c]&&S.stamps[c].f}).f||""} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`).join("")}</div></div>
+ <div class="pass"><div class="in">${all.map(c=>`<label for="f-${esc(c)}">${fi((R.find(r=>r.c===c)||{f:S.stamps[c]&&S.stamps[c].f}).f||"")} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`).join("")}</div></div>
  ${acct()}`;
 }
 function bind(){
