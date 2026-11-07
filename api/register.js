@@ -13,9 +13,15 @@ module.exports = async (req, res) => {
       return res.status(400).json({ error: "Username must be 3 to 20 letters, numbers or underscores." });
     if (typeof password !== "string" || password.length < 8 || password.length > 72)
       return res.status(400).json({ error: "Password must be 8 to 72 characters." });
-    const user = await db.create(username.toLowerCase(), await bcrypt.hash(password, 10));
-    if (!user) return res.status(409).json({ error: "That username is taken." });
-    res.status(201).json({ token: L.sign(user), user: { username: user.username } });
+    let email = "";
+    if (typeof b.email === "string" && b.email.trim()) {
+      email = L.normEmail(b.email);
+      if (!email) return res.status(400).json({ error: "That email address doesn't look right." });
+    }
+    const made = await db.create(username.toLowerCase(), await bcrypt.hash(password, 10), email);
+    if (made.dup === "email") return res.status(409).json({ error: "That email is already used by another account." });
+    if (!made.user) return res.status(409).json({ error: "That username is taken." });
+    res.status(201).json({ token: L.sign(made.user), user: L.publicUser(made.user) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Something went wrong." });
