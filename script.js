@@ -25,7 +25,7 @@ const clock=t=>new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digi
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 // ---------- optional account: cloud backup & sync (the app works fully without it) ----------
-let ACC=null,acctMsg="",acctOk=false,acctBusy=false,acctUser="",acctEmail="",acctMode="",resetTok="",mailEdit=false,ME=null,LB=[],pushT=0;
+let ACC=null,acctMsg="",acctOk=false,acctBusy=false,acctUser="",acctEmail="",acctMode="",resetTok="",mailEdit=false,acctKeep=false,ME=null,LB=[],pushT=0;
 try{ACC=JSON.parse(localStorage.getItem("sj_acct")||"null")}catch(e){}
 function setAcc(a){ACC=a;try{a?localStorage.setItem("sj_acct",JSON.stringify(a)):localStorage.removeItem("sj_acct")}catch(e){}}
 async function api(path,method,body){
@@ -75,7 +75,8 @@ function acct(){
  if(!ACC)return head+`<p class="sub">Optional. A free account backs up your passport and lets you use it on any device. Adding an email lets you reset your password if you forget it. Study Flight works fine without an account.</p>
  <div class="pass"><div class="in"><label for="au">Username</label><input id="au" autocomplete="username" maxlength="20" value="${esc(acctUser)}" placeholder="3 to 20 letters, numbers or _">
  <label for="ap">Password</label><input id="ap" type="password" autocomplete="current-password" placeholder="At least 8 characters">
- <label for="ae">Email (recommended, for password recovery)</label><input id="ae" type="email" autocomplete="email" value="${esc(acctEmail)}" placeholder="you@example.com">${msg}
+ <label for="ae">Email (recommended, for password recovery)</label><input id="ae" type="email" autocomplete="email" value="${esc(acctEmail)}" placeholder="you@example.com">
+ ${nCty()?`<label class="chk"><input type="checkbox" id="akeep"${acctKeep?" checked":""}><span>Bring this device’s progress (${nCty()} countr${nCty()===1?"y":"ies"}, ${nTrips()} trip${nTrips()===1?"":"s"}) into the account. <b>Leave unticked for a fresh start</b>; that clears it from this device.</span></label>`:""}${msg}
  <div class="row" style="gap:8px;margin-top:12px"><button class="btn" id="aReg"${dis}>Create account</button><button class="btn alt" id="aLog"${dis}>Log in</button></div>
  <button class="btn alt" id="aForgot" style="width:auto;margin-top:10px;padding:8px 12px;font-size:14px">Forgot password?</button></div></div>`;
  const lb=LB.length?`<p class="sub" style="margin:14px 0 6px">Top travellers</p>`+LB.slice(0,5).map((u,i)=>`<div class="row" style="padding:4px 0"><span>${i+1}. ${esc(u.username)}</span><span class="sub" style="margin:0">${hm(u.minutes)} · ${u.countries} countr${u.countries===1?"y":"ies"}</span></div>`).join(""):"";
@@ -88,14 +89,14 @@ function acct(){
  <div class="row" style="gap:8px;margin-top:12px"><button class="btn alt" id="aOut" style="width:auto">Log out</button><button class="btn alt" id="aDel" style="width:auto">Delete account</button></div></div></div>`;
 }
 async function authGo(kind){
- const u=$("#au").value.trim(),pw=$("#ap").value,em=$("#ae")?$("#ae").value.trim():"";acctUser=u;acctEmail=em;acctOk=false;
+ const u=$("#au").value.trim(),pw=$("#ap").value,em=$("#ae")?$("#ae").value.trim():"",kp=$("#akeep");if(kp)acctKeep=kp.checked;acctUser=u;acctEmail=em;acctOk=false;
  if(!u||!pw){acctMsg="Enter a username and password.";return render()}
  if(kind==="register"&&em&&!okMail(em)){acctMsg="That email address doesn’t look right.";return render()}
  acctBusy=true;acctMsg=kind==="register"?"Creating your account…":"Logging in…";render();
  try{
   const r=await api(kind,"POST",kind==="register"?{username:u,password:pw,email:em}:{username:u,password:pw});
   if(!r.ok){acctMsg=r.status===404||r.status===405?"Accounts only work on the deployed website, not when opening the file directly.":(r.body.error||"Something went wrong.")}
-  else{setAcc({token:r.body.token,user:r.body.user.username});ME=r.body.user;acctMsg="";acctUser="";acctEmail="";acctBusy=false;await pull();return render()}
+  else{if(!acctKeep){S={stamps:{},friends:{}};saveLocal()}setAcc({token:r.body.token,user:r.body.user.username});ME=r.body.user;acctMsg="";acctUser="";acctEmail="";acctKeep=false;acctBusy=false;await pull();return render()}
  }catch(e){acctMsg="Can’t reach the server. Check your connection. Your passport still works offline."}
  acctBusy=false;render();
 }
@@ -139,6 +140,7 @@ function bindAcct(){
  if(r)r.onclick=()=>authGo("register");
  if(l)l.onclick=()=>authGo("login");
  const ap=$("#ap");if(ap)ap.onkeydown=e=>{if(e.key==="Enter")authGo("login")};
+ const kp=$("#akeep");if(kp)kp.onchange=()=>{acctKeep=kp.checked};
  const fg=$("#aForgot");if(fg)fg.onclick=()=>{acctUser=$("#au").value.trim();acctEmail=$("#ae").value.trim();acctMode="forgot";acctMsg="";acctOk=false;render();const i=$("#ae");if(i)i.focus()};
  const bk=$("#aBack");if(bk)bk.onclick=()=>{acctMode="";resetTok="";acctMsg="";acctOk=false;render()};
  const sd=$("#aSend");if(sd){sd.onclick=sendReset;const i=$("#ae");if(i)i.onkeydown=e=>{if(e.key==="Enter")sendReset()}}
