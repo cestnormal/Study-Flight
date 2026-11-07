@@ -5,6 +5,7 @@ const assert = require("assert");
 process.env.SF_MEMORY = "1";
 process.env.JWT_SECRET = "test-secret";
 delete process.env.SUPABASE_URL;
+process.env.SITE_URL = "https://study-flight.test";
 
 const routes = {
   "/api/health": require("../api/health"),
@@ -13,6 +14,8 @@ const routes = {
   "/api/me": require("../api/me"),
   "/api/passport": require("../api/passport"),
   "/api/leaderboard": require("../api/leaderboard"),
+  "/api/forgot": require("../api/forgot"),
+  "/api/reset": require("../api/reset"),
 };
 
 let ip = 0;
@@ -116,6 +119,74 @@ async function check(name, fn) {
     assert.strictEqual(r.body.leaderboard[0].username, "gaurish");
     assert.strictEqual(r.body.leaderboard[1].username, "friend_b");
     assert.deepStrictEqual(Object.keys(r.body.leaderboard[0]).sort(), ["countries", "minutes", "trips", "username"]);
+  });
+  await check("accounts can have an optional recovery email (shown masked)", async () => {
+    assert.strictEqual((await call("POST", "/api/register", { username: "bad_mail", password: "password1", email: "nope" })).status, 400);
+    const r = await call("POST", "/api/register", { username: "reset_me", password: "oldpass123", email: "Gaurish@Example.com" });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.body.user.email, "g***@example.com");
+    assert.strictEqual((await call("POST", "/api/register", { username: "other_one", password: "password1", email: "gaurish@example.com" })).status, 409);
+    assert.strictEqual((await call("GET", "/api/me", null, r.body.token)).body.user.email, "g***@example.com");
+    assert.strictEqual((await call("GET", "/api/me", null, tokenA)).body.user.email, null);
+  });
+  await check("adding an email later needs the current password", async () => {
+    assert.strictEqual((await call("PUT", "/api/me", { email: "me@example.org", password: "wrongpass1" }, tokenA)).status, 403);
+    assert.strictEqual((await call("PUT", "/api/me", { email: "nope", password: "password1" }, tokenA)).status, 400);
+    assert.strictEqual((await call("PUT", "/api/me", { email: "gaurish@example.com", password: "password1" }, tokenA)).status, 409);
+    const r = await call("PUT", "/api/me", { email: "me@example.org", password: "password1" }, tokenA);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.user.email, "m***@example.org");
+  });
+  await check("forgot password: same answer for unknown emails, no mail sent", async () => {
+    const mail = require("../api/_mail");
+    const before = mail.outbox.length;
+    const r = await call("POST", "/api/forgot", { email: "nobody@example.com" });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body, { ok: true });
+    assert.strictEqual(mail.outbox.length, before);
+    assert.strictEqual((await call("POST", "/api/forgot", { email: "not-an-email" })).status, 400);
+  });
+  await check("full reset: email link, new password, old logins and old password stop working, link is single use", async () => {
+    const mail = require("../api/_mail");
+    const oldLogin = await call("POST", "/api/login", { username: "reset_me", password: "oldpass123" });
+    const before = mail.outbox.length;
+    assert.strictEqual((await call("POST", "/api/forgot", { email: "gaurish@example.com" })).status, 200);
+    assert.strictEqual(mail.outbox.length, before + 1);
+    const m = mail.outbox[mail.outbox.length - 1];
+    assert.strictEqual(m.to, "gaurish@example.com");
+    assert.ok(m.text.includes("reset_me"), "mail mentions the username");
+    const token = (m.text.match(/#reset=([a-f0-9]{64})/) || [])[1];
+    assert.ok(token, "mail contains a reset link");
+    assert.ok(m.text.includes("https://study-flight.test/#reset="));
+    // asking again straight away does not spam the inbox
+    await call("POST", "/api/forgot", { email: "gaurish@example.com" });
+    assert.strictEqual(mail.outbox.length, before + 1);
+    // bad inputs
+    assert.strictEqual((await call("POST", "/api/reset", { token, password: "short" })).status, 400);
+    assert.strictEqual((await call("POST", "/api/reset", { token: "f".repeat(64), password: "brandnew123" })).status, 400);
+    assert.strictEqual((await call("POST", "/api/reset", { token: "garbage", password: "brandnew123" })).status, 400);
+    // the real thing
+    const ok = await call("POST", "/api/reset", { token, password: "brandnew123" });
+    assert.strictEqual(ok.status, 200);
+    assert.ok(ok.body.token);
+    assert.strictEqual((await call("GET", "/api/me", null, ok.body.token)).status, 200, "new login works");
+    assert.strictEqual((await call("GET", "/api/me", null, oldLogin.body.token)).status, 401, "old logins are signed out");
+    assert.strictEqual((await call("POST", "/api/login", { username: "reset_me", password: "oldpass123" })).status, 401);
+    assert.strictEqual((await call("POST", "/api/login", { username: "reset_me", password: "brandnew123" })).status, 200);
+    assert.strictEqual((await call("POST", "/api/reset", { token, password: "another12345" })).status, 400, "link works only once");
+  });
+  await check("expired reset links are refused", async () => {
+    const db = require("../api/_db"), crypto = require("crypto");
+    const u = await db.findByName("reset_me");
+    const token = crypto.randomBytes(32).toString("hex");
+    await db.setReset(u.id, crypto.createHash("sha256").update(token).digest("hex"), new Date(Date.now() - 1000).toISOString());
+    assert.strictEqual((await call("POST", "/api/reset", { token, password: "brandnew456" })).status, 400);
+  });
+  await check("reset by email says so when the server has no mail or site address set up", async () => {
+    const saved = process.env.SITE_URL; delete process.env.SITE_URL;
+    const r = await call("POST", "/api/forgot", { email: "gaurish@example.com" });
+    process.env.SITE_URL = saved;
+    assert.strictEqual(r.status, 503);
   });
   await check("wrong HTTP method is rejected", async () =>
     assert.strictEqual((await call("GET", "/api/register")).status, 405));
