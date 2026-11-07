@@ -3,6 +3,8 @@ const jwt = require("jsonwebtoken");
 const db = require("./_db");
 
 const USERNAME = /^[A-Za-z0-9_]{3,20}$/;
+const MEDAL_ID = /^[a-z0-9_]{1,24}$/;
+const ST_KEYS = ["m_Flight", "m_Train", "m_Bus", "m_Car", "m_Ferry", "m_Bike", "owl", "lark", "best", "long", "iron", "turb", "dbest"];
 
 function readBody(req) {
   try {
@@ -84,6 +86,13 @@ function clean(p) {
   }
   out.dly = num(p && p.dly, 100000);
   out.tdl = num(p && p.tdl, 10000000);
+  // medal progress: only known counters are kept, and medals are just id -> date earned
+  out.st = {};
+  const stats = p && typeof p.st === "object" && p.st ? p.st : {};
+  for (const k of ST_KEYS) if (k in stats) out.st[k] = num(stats[k], 10000000);
+  out.md = {};
+  const md = p && typeof p.md === "object" && p.md ? p.md : {};
+  for (const k of Object.keys(md).slice(0, 80)) if (MEDAL_ID.test(k) && typeof md[k] === "string") out.md[k] = md[k].slice(0, 10);
   return out;
 }
 
@@ -102,6 +111,14 @@ function merge(old, inc) {
   }
   const fr = { ...(old.friends || {}), ...(inc.friends || {}) };
   for (const k of Object.keys(fr)) if (fr[k]) out.friends[k] = fr[k];
+  // counters only go up; a medal keeps the earliest date it was earned
+  out.st = {};
+  for (const k of ST_KEYS) {
+    const v = Math.max((old.st || {})[k] || 0, (inc.st || {})[k] || 0);
+    if (v) out.st[k] = v;
+  }
+  out.md = { ...(old.md || {}) };
+  for (const k of Object.keys(inc.md || {})) if (!out.md[k] || inc.md[k] < out.md[k]) out.md[k] = inc.md[k];
   return out;
 }
 
