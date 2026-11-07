@@ -41,12 +41,15 @@ function mergeServer(p){
   S.stamps[c]=!a?{...b}:{n:Math.max(a.n,b.n),min:Math.max(a.min,b.min),f:a.f||b.f,last:(b.n>a.n?b.last:a.last)||b.last||""}}
  for(const c of Object.keys(p.friends||{}))if(p.friends[c]&&!S.friends[c])S.friends[c]=p.friends[c];
  S.dly=Math.max(S.dly||0,p.dly||0);S.tdl=Math.max(S.tdl||0,p.tdl||0);
+  S.st=S.st||{};for(const k of Object.keys(p.st||{}))S.st[k]=Math.max(S.st[k]||0,p.st[k]);
+  S.md=S.md||{};for(const k of Object.keys(p.md||{}))if(!S.md[k]||p.md[k]<S.md[k])S.md[k]=p.md[k];
+  checkMedals();
  saveLocal();
 }
 function queuePush(){if(!ACC)return;clearTimeout(pushT);pushT=setTimeout(push,1500)}
 async function push(){
  if(!ACC)return false;
- try{const r=await api("passport","PUT",{passport:{stamps:S.stamps,friends:S.friends,dly:S.dly||0,tdl:S.tdl||0}});
+ try{const r=await api("passport","PUT",{passport:{stamps:S.stamps,friends:S.friends,dly:S.dly||0,tdl:S.tdl||0,st:S.st||{},md:S.md||{}}});
   if(r.ok){mergeServer(r.body.passport);return true}}catch(e){}
  return false;
 }
@@ -148,32 +151,60 @@ const ALIAS={burma:"myanmar","czech republic":"czechia","cote d'ivoire":"ivory c
 const flag=cc=>String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0)));
 // Windows Chrome shows flag emoji as two letters, so draw flags as small images instead.
 const fi=f=>{const a=[...(f||"")].map(c=>c.codePointAt(0));if(a.length===2&&a.every(x=>x>=127462&&x<=127487)){const cc=a.map(x=>String.fromCharCode(x-127397)).join("").toLowerCase();return `<img class="flag" src="https://flagcdn.com/w40/${cc}.png" srcset="https://flagcdn.com/w80/${cc}.png 2x" alt="${cc.toUpperCase()}" onerror="this.replaceWith(document.createTextNode(this.alt))">`}return f||""};
-// ---------- where you are now: after you land somewhere, new trips start from there ----------
-const HOME={b:"Paris",c:"France",f:"🇫🇷"};
+// ---------- where you are now: every trip starts from your current location, for every kind of transport ----------
+const HOME={b:"Paris",c:"France",f:"🇫🇷",cc:"FR"};
 const here=()=>S.at||HOME;
 const cn=c=>({UK:"United Kingdom",UAE:"United Arab Emirates"})[c]||c;
+const ck=n=>({"United Kingdom":"UK","United Arab Emirates":"UAE"})[n]||n; // keeps passport stamp names consistent
 const dkm=(p,q)=>{const D=Math.PI/180,h=x=>Math.sin(x/2)**2,a=h((q[0]-p[0])*D)+Math.cos(p[0]*D)*Math.cos(q[0]*D)*h((q[1]-p[1])*D);return 12742*Math.asin(Math.sqrt(a))};
+// continent of every country (E Europe, A Asia, F Africa, N North America, S South America, O Oceania) and a famous city for each
+const CONT={},CAP={};
+"E:AD,AL,AT,BA,BE,BG,BY,CH,CY,CZ,DE,DK,EE,ES,FI,FR,GB,GR,HR,HU,IE,IS,IT,LI,LT,LU,LV,MC,MD,ME,MK,MT,NL,NO,PL,PT,RO,RS,RU,SE,SI,SK,SM,UA,VA,XK;A:AE,AF,AM,AZ,BD,BH,BN,BT,CN,GE,ID,IL,IN,IQ,IR,JO,JP,KG,KH,KP,KR,KW,KZ,LA,LB,LK,MM,MN,MV,MY,NP,OM,PH,PK,PS,QA,SA,SG,SY,TH,TJ,TL,TM,TR,TW,UZ,VN,YE;F:AO,BF,BI,BJ,BW,CD,CF,CG,CI,CM,CV,DJ,DZ,EG,ER,ET,GA,GH,GM,GN,GQ,GW,KE,KM,LR,LS,LY,MA,MG,ML,MR,MU,MW,MZ,NA,NE,NG,RW,SC,SD,SL,SN,SO,SS,ST,SZ,TD,TG,TN,TZ,UG,ZA,ZM,ZW;N:AG,BB,BS,BZ,CA,CR,CU,DM,DO,GD,GT,HN,HT,JM,KN,LC,MX,NI,PA,SV,TT,US,VC;S:AR,BO,BR,CL,CO,EC,GY,PE,PY,SR,UY,VE;O:AU,FJ,KI,MH,FM,NR,NZ,PG,PW,SB,TO,TV,VU,WS".split(";").forEach(s=>{const[k,v]=s.split(":");v.split(",").forEach(c=>CONT[c]=k)});
+"AF:Kabul;AL:Tirana;DZ:Algiers;AD:Andorra la Vella;AO:Luanda;AG:St. John's;AR:Buenos Aires;AM:Yerevan;AU:Sydney;AT:Vienna;AZ:Baku;BS:Nassau;BH:Manama;BD:Dhaka;BB:Bridgetown;BY:Minsk;BE:Brussels;BZ:Belmopan;BJ:Porto-Novo;BT:Thimphu;BO:La Paz;BA:Sarajevo;BW:Gaborone;BR:Brasília;BN:Bandar Seri Begawan;BG:Sofia;BF:Ouagadougou;BI:Gitega;CV:Praia;KH:Phnom Penh;CM:Yaoundé;CA:Ottawa;CF:Bangui;TD:N'Djamena;CL:Santiago;CN:Beijing;CO:Bogotá;KM:Moroni;CR:San José;HR:Zagreb;CU:Havana;CY:Nicosia;CZ:Prague;CD:Kinshasa;DK:Copenhagen;DJ:Djibouti;DM:Roseau;DO:Santo Domingo;EC:Quito;EG:Cairo;SV:San Salvador;GQ:Malabo;ER:Asmara;EE:Tallinn;SZ:Mbabane;ET:Addis Ababa;FJ:Suva;FI:Helsinki;FR:Paris;GA:Libreville;GM:Banjul;GE:Tbilisi;DE:Berlin;GH:Accra;GR:Athens;GD:St. George's;GT:Guatemala City;GN:Conakry;GW:Bissau;GY:Georgetown;HT:Port-au-Prince;HN:Tegucigalpa;HU:Budapest;IS:Reykjavik;IN:Delhi;ID:Jakarta;IR:Tehran;IQ:Baghdad;IE:Dublin;IL:Jerusalem;IT:Rome;CI:Yamoussoukro;JM:Kingston;JP:Tokyo;JO:Amman;KZ:Astana;KE:Nairobi;KI:Tarawa;XK:Pristina;KW:Kuwait City;KG:Bishkek;LA:Vientiane;LV:Riga;LB:Beirut;LS:Maseru;LR:Monrovia;LY:Tripoli;LI:Vaduz;LT:Vilnius;LU:Luxembourg;MG:Antananarivo;MW:Lilongwe;MY:Kuala Lumpur;MV:Malé;ML:Bamako;MT:Valletta;MH:Majuro;MR:Nouakchott;MU:Port Louis;MX:Mexico City;FM:Palikir;MD:Chișinău;MC:Monaco;MN:Ulaanbaatar;ME:Podgorica;MA:Rabat;MZ:Maputo;MM:Naypyidaw;NA:Windhoek;NR:Yaren;NP:Kathmandu;NL:Amsterdam;NZ:Wellington;NI:Managua;NE:Niamey;NG:Abuja;KP:Pyongyang;MK:Skopje;NO:Oslo;OM:Muscat;PK:Islamabad;PW:Ngerulmud;PS:Ramallah;PA:Panama City;PG:Port Moresby;PY:Asunción;PE:Lima;PH:Manila;PL:Warsaw;PT:Lisbon;QA:Doha;CG:Brazzaville;RO:Bucharest;RU:Moscow;RW:Kigali;KN:Basseterre;LC:Castries;VC:Kingstown;WS:Apia;SM:San Marino;ST:São Tomé;SA:Riyadh;SN:Dakar;RS:Belgrade;SC:Victoria;SL:Freetown;SG:Singapore;SK:Bratislava;SI:Ljubljana;SB:Honiara;SO:Mogadishu;ZA:Pretoria;KR:Seoul;SS:Juba;ES:Madrid;LK:Colombo;SD:Khartoum;SR:Paramaribo;SE:Stockholm;CH:Bern;SY:Damascus;TW:Taipei;TJ:Dushanbe;TZ:Dodoma;TH:Bangkok;TL:Dili;TG:Lomé;TO:Nukuʻalofa;TT:Port of Spain;TN:Tunis;TR:Ankara;TM:Ashgabat;TV:Funafuti;UG:Kampala;UA:Kyiv;AE:Dubai;GB:London;UY:Montevideo;US:New York;UZ:Tashkent;VU:Port Vila;VA:Vatican City;VE:Caracas;VN:Hanoi;YE:Sana'a;ZM:Lusaka;ZW:Harare".split(";").forEach(s=>{const i=s.indexOf(":");CAP[s.slice(0,i)]=s.slice(i+1)});
+const ISL=new Set("GB IE IS CY MT JP PH ID LK TW CU JM BS BB AG DM GD KN LC VC TT DO HT KM MG MU SC CV ST FJ KI MH FM NR PW PG WS SB TO TV VU NZ AU BN TL MV".split(" "));
+const LL=new Set("AD AT AM AZ BY BT BO BW BF BI CF TD CZ SZ ET HU KZ XK KG LA LS LI LU MW ML MD MN NP NE MK PY RW SM RS SK SS TJ TM UG UZ VA ZM ZW AF".split(" "));
+const GBPART=new Set("FR BE NL LU DE CH".split(" ")); // reachable from the UK by Channel Tunnel
+const FAM="ES IT GB PT GR TR EG MA US CA MX BR AR AE IN TH SG JP KR CN AU NZ ZA KE IS NO SE DK CH AT PL RU SA ID VN CL PE CO".split(" ");
+const MODES={Flight:{m:"\u2708\ufe0f",spd:850,pad:30,lo:450,hi:1e5,n:8},Train:{m:"🚆",spd:130,pad:30,lo:60,hi:1500,n:6},Bus:{m:"🚌",spd:70,pad:30,lo:40,hi:1200,n:6},Car:{m:"🚗",spd:85,pad:15,lo:40,hi:1300,n:5},Ferry:{m:"\u26f4\ufe0f",spd:35,pad:45,lo:30,hi:1000,n:5}};
+const ccOf=h=>h.cc||((findC(cn(h.c))||[])[1])||"";
+const lg=c=>CONT[c]==="E"||CONT[c]==="A"?"EA":CONT[c];
+function landOK(a,b){ // can you drive, bus or take a train between these two countries?
+ if(!a||!b||a===b)return false;
+ if(a==="GB"||b==="GB")return GBPART.has(a==="GB"?b:a);
+ if(ISL.has(a)||ISL.has(b))return false;
+ return lg(a)===lg(b);
+}
+const seaOK=(a,b)=>!!a&&!!b&&a!==b&&!LL.has(a)&&!LL.has(b)&&(ISL.has(a)||ISL.has(b)||CONT[a]!==CONT[b]);
+function spread(L,n){ // always keep the nearest few, then spread the rest from medium to longest trips
+ if(L.length<=n)return L;
+ const k=Math.min(3,n-1),rest=L.slice(k),m=n-k,o=L.slice(0,k);
+ for(let i=0;i<m;i++)o.push(rest[Math.round(i*(rest.length-1)/(m-1))]);
+ return o.filter((x,i)=>o.indexOf(x)===i);
+}
+function mkRoute(k,o,h,c){
+ const M=MODES[k],b=CAP[c[1]]||c[0],km=dkm(o,[c[2],c[3]]);
+ if(!CITY[b]&&!XY[b])XY[b]=[c[2],c[3]];
+ return{m:M.m,k,a:h.b,b,c:ck(c[0]),f:flag(c[1]),cc:c[1],min:Math.max(25,Math.round(km/M.spd*60+M.pad)),xy:[o,pt(b)]};
+}
 let RTkey="",RT=R;
 function routes(){
- const k=S.at?S.at.b+"|"+S.at.c:"";
- if(k===RTkey)return RT;
- RTkey=k;delete XY.Hotel;delete XY.Library;
- if(!S.at){RT=R;return RT}
- const h=S.at,o=pt(h.b),spd={Flight:[850,30],Train:[130,30],Bus:[70,30]},lim={Train:1500,Bus:1200};
- const pool=R.filter(r=>r.k!=="Short hop");
- for(const [m,kk] of [["✈️","Flight"],["🚆","Train"],["🚌","Bus"]])pool.push({m,k:kk,b:HOME.b,c:HOME.c,f:HOME.f});
- const out=[];
- for(const r of pool){
-  if(cn(r.c)===cn(h.c))continue;
-  const km=dkm(o,pt(r.b));
-  if(lim[r.k]&&km>lim[r.k])continue;
-  out.push({...r,a:h.b,min:Math.max(25,Math.round(km/spd[r.k][0]*60+spd[r.k][1]))});
+ const h=here(),key=h.b+"|"+h.c;
+ if(key===RTkey)return RT;
+ RTkey=key;delete XY.Hotel;delete XY.Library;
+ if(h.xy)XY[h.b]=h.xy;
+ const o=pt(h.b),oc=ccOf(h),out=[];
+ const pool=CT.filter(c=>c[1]!==oc&&cn(c[0])!==cn(h.c)).map(c=>({c,km:dkm(o,[c[2],c[3]])}));
+ for(const k of ["Flight","Train","Bus","Car","Ferry"]){
+  const M=MODES[k];
+  const L=pool.filter(x=>x.km>=M.lo&&x.km<=M.hi&&(k==="Flight"?FAM.includes(x.c[1]):k==="Ferry"?seaOK(oc,x.c[1]):landOK(oc,x.c[1]))).sort((p,q)=>p.km-q.km);
+  out.push(...spread(L,M.n).map(x=>mkRoute(k,o,h,x.c)));
  }
- XY.Hotel=o;XY.Library=[o[0]+.1,o[1]+.1];
- out.push({m:"🚲",k:"Short hop",a:"Hotel",b:"Library",c:h.c,f:h.f,min:25});
+ if(S.at){XY.Hotel=o;XY.Library=[o[0]+.1,o[1]+.1];out.push({m:"🚲",k:"Short hop",a:"Hotel",b:"Library",c:h.c,f:h.f,cc:oc,min:25})}
+ else out.push(R.find(r=>r.k==="Short hop"));
  RT=out;return RT;
 }
 function pickRoute(){const L=routes();return L.find(r=>r.k===mode)||{c:"",k:mode,min:0}}
+function emptyMsg(m,h){return m==="Ferry"&&LL.has(ccOf(h))?`${h.b} is landlocked, so there are no ferries from here. Try a train, bus or car.`:`No ${m.toLowerCase()} routes from ${h.b} are close enough. Try a flight or a custom trip.`}
 const findC=s=>{s=(s||"").trim().toLowerCase();s=ALIAS[s]||s;return CT.find(c=>c[0].toLowerCase()===s)};
 function est(c){const D=Math.PI/180,[la,lo]=pt(here().b),h=(x)=>Math.sin(x/2)**2,dl=(c[2]-la)*D,dn=(c[3]-lo)*D;const a=h(dl)+Math.cos(la*D)*Math.cos(c[2]*D)*h(dn);const km=12742*Math.asin(Math.sqrt(a));return Math.max(25,Math.round(km/850*60+30))}
 let note="",fix=0,ccIn="";
@@ -185,7 +216,7 @@ function board(force){
  if(!m||m<1){note="Enter how many minutes you want to study.";fix=0;return render()}
  const e=est(q);
  if(!force&&Math.abs(m-e)>Math.max(e*.3,15)){note=`${here().b} to ${q[0]} takes about ${hm(e)} by plane. You entered ${hm(m)}.`;fix=e;return render()}
- Object.assign(sel,{a:here().b,c:q[0],b:q[0],f:flag(q[1]),min:m});note="";fix=0;start();
+ Object.assign(sel,{a:here().b,c:ck(q[0]),b:q[0],f:flag(q[1]),cc:q[1],min:m,xy:[pt(here().b),[q[2],q[3]]]});note="";fix=0;start();
 }
 let LP={},G={lo:0,la:0},GP=0,GR=270;
 const SEAS=["47,45 50,47 53,46.5 53,44 51,42 52.5,40 53.8,37 51,36.7 49,38 49,40 48,41.5 47.5,43"];
@@ -270,6 +301,7 @@ function start(){
  unlock();G.lo=0;G.la=0;
  const mins=sel.custom?+custom:sel.min;
  if(!mins||mins<1)return;
+ if(sel.xy){XY[sel.a]=sel.xy[0];XY[sel.b]=sel.xy[1]}
  J={r:{...sel,min:mins},total:mins*60000,done:0,delay:0,pauses:0,paused:false,last:Date.now(),pausedAt:0,subject};
  view="trip";render();
 }
@@ -279,15 +311,106 @@ function pause(){
  render();
 }
 function land(){
- const r=J.r,c=r.c;
- chime();document.title="Landed! ✈️ · Study Flight";
- const st=S.stamps[c]||{n:0,min:0,f:r.f,last:""};
- st.n++;st.min+=Math.round(J.done/60000);st.last=new Date().toLocaleDateString();st.f=r.f;
- if(r.k!=="Short hop"){S.at=(r.b===HOME.b&&r.c===HOME.c)?null:{b:r.b,c:r.c,f:r.f}}
- S.stamps[c]=st;S.dly=(S.dly||0)+(J.delay>0?1:0);S.tdl=(S.tdl||0)+Math.round(J.delay/60000);save();
- arrived={r,delay:J.delay,pauses:J.pauses};J=null;sel=pickRoute();clearTrip();view="trip";render();
+  const r=J.r,c=r.c,mins=Math.round(J.done/60000),delayMin=Math.round(J.delay/60000);
+  chime();document.title="Landed! ✈️ · Study Flight";
+  const st=S.stamps[c]||{n:0,min:0,f:r.f,last:""};
+  st.n++;st.min+=mins;st.last=new Date().toLocaleDateString();st.f=r.f;
+  if(r.k!=="Short hop"){S.at=(r.b===HOME.b&&r.c===HOME.c)?null:{b:r.b,c:r.c,f:r.f,cc:r.cc||(findC(cn(r.c))||[])[1]||"",xy:pt(r.b)}}
+  S.stamps[c]=st;S.dly=(S.dly||0)+(J.delay>0?1:0);S.tdl=(S.tdl||0)+delayMin;
+  recordStats(r,delayMin,J.pauses,mins);const medals=checkMedals();save();
+  arrived={r,delay:J.delay,pauses:J.pauses,medals};J=null;sel=pickRoute();clearTrip();view="trip";render();
+ }
+ function abandon(){if(confirm("Cancel this trip? You won’t earn a stamp.")){J=null;clearTrip();view="plan";render()}}
+
+// ---------- medals: from common to legendary ----------
+const localISO=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const stv=k=>(S.st&&S.st[k])||0;
+const nTrips=()=>Object.values(S.stamps||{}).reduce((a,x)=>a+x.n,0);
+const nMin=()=>Object.values(S.stamps||{}).reduce((a,x)=>a+x.min,0);
+const nCty=()=>Object.keys(S.stamps||{}).length;
+const nFr=()=>Object.values(S.friends||{}).filter(Boolean).length;
+const nConts=()=>new Set(Object.keys(S.stamps||{}).map(n=>CONT[(findC(cn(n))||[])[1]]).filter(Boolean)).size;
+const nModes=()=>["Flight","Train","Bus","Car","Ferry"].filter(k=>stv("m_"+k)>0).length;
+const MEDALS=[
+ {id:"first",i:"🎫",n:"First Boarding",d:"Land your first trip",r:"Common",g:1,v:nTrips},
+ {id:"cty3",i:"🧭",n:"Passport Pages",d:"Visit 3 countries",r:"Common",g:3,v:nCty},
+ {id:"h1",i:"⏱️",n:"Warm-up",d:"Study for 1 hour in total",r:"Common",g:60,u:"min",v:nMin},
+ {id:"trips10",i:"🧳",n:"Frequent Flyer",d:"Land 10 trips",r:"Common",g:10,v:nTrips},
+ {id:"clean3",i:"🛬",n:"Smooth Landing",d:"Land 3 trips in a row without pausing",r:"Common",g:3,v:()=>stv("best")},
+ {id:"turb",i:"🌩️",n:"Turbulence Survivor",d:"Land a trip after 30+ minutes of delay",r:"Common",g:1,v:()=>stv("turb")},
+ {id:"day3",i:"🔥",n:"On a Roll",d:"Study 3 days in a row",r:"Common",g:3,v:()=>stv("dbest")},
+ {id:"ferry",i:"⚓",n:"Sea Legs",d:"Take your first ferry",r:"Common",g:1,v:()=>stv("m_Ferry")},
+ {id:"cty10",i:"🗺️",n:"Explorer",d:"Visit 10 countries",r:"Rare",g:10,v:nCty},
+ {id:"h10",i:"📚",n:"Bookworm",d:"Study for 10 hours in total",r:"Rare",g:600,u:"min",v:nMin},
+ {id:"owl",i:"🦉",n:"Night Owl",d:"Land a trip between midnight and 5 am",r:"Rare",g:1,v:()=>stv("owl")},
+ {id:"lark",i:"🐦",n:"Early Bird",d:"Land a trip between 5 and 8 am",r:"Rare",g:1,v:()=>stv("lark")},
+ {id:"day7",i:"📆",n:"Week Warrior",d:"Study 7 days in a row",r:"Rare",g:7,v:()=>stv("dbest")},
+ {id:"rail",i:"🚉",n:"Rail Rider",d:"Take 5 train trips",r:"Rare",g:5,v:()=>stv("m_Train")},
+ {id:"fr5",i:"🤝",n:"Welcome Committee",d:"Add friends in 5 countries",r:"Rare",g:5,v:nFr},
+ {id:"cont3",i:"🌏",n:"Continent Hopper",d:"Visit 3 continents",r:"Rare",g:3,v:nConts},
+ {id:"cty25",i:"🌐",n:"Globetrotter",d:"Visit 25 countries",r:"Epic",g:25,v:nCty},
+ {id:"h50",i:"🧠",n:"Deep Thinker",d:"Study for 50 hours in total",r:"Epic",g:3000,u:"min",v:nMin},
+ {id:"trips50",i:"🛩️",n:"Jet Setter",d:"Land 50 trips",r:"Epic",g:50,v:nTrips},
+ {id:"clean10",i:"🎯",n:"Autopilot",d:"Land 10 trips in a row without pausing",r:"Epic",g:10,v:()=>stv("best")},
+ {id:"long8",i:"🛫",n:"Long-Haul Hero",d:"Finish a trip of 8 hours or more",r:"Epic",g:480,u:"min",v:()=>stv("long")},
+ {id:"modes",i:"🎒",n:"All Aboard",d:"Finish a trip by flight, train, bus, car and ferry",r:"Epic",g:5,v:nModes},
+ {id:"cty50",i:"🏆",n:"Citizen of the World",d:"Visit 50 countries",r:"Legendary",g:50,v:nCty},
+ {id:"h100",i:"👑",n:"Centurion",d:"Study for 100 hours in total",r:"Legendary",g:6000,u:"min",v:nMin},
+ {id:"iron",i:"💎",n:"Iron Focus",d:"Finish a 12 hour trip without pausing",r:"Legendary",g:1,v:()=>stv("iron")},
+ {id:"day30",i:"⚡",n:"Unstoppable",d:"Study 30 days in a row",r:"Legendary",g:30,v:()=>stv("dbest")},
+ {id:"cont6",i:"🪐",n:"Every Continent",d:"Visit all 6 continents",r:"Legendary",g:6,v:nConts}
+];
+function recordStats(r,delayMin,pauses,mins){
+ const now=new Date(),h=now.getHours(),iso=localISO(now),st=S.st=S.st||{};
+ const key="m_"+({"Short hop":"Bike",Custom:"Flight"}[r.k]||r.k);
+ st[key]=(st[key]||0)+1;
+ if(pauses===0){S.run=(S.run||0)+1;if(mins>=720)st.iron=(st.iron||0)+1}else S.run=0;
+ st.best=Math.max(st.best||0,S.run||0);
+ st.long=Math.max(st.long||0,mins);
+ if(delayMin>=30)st.turb=(st.turb||0)+1;
+ if(h<5)st.owl=(st.owl||0)+1;else if(h<8)st.lark=(st.lark||0)+1;
+ if(S.day!==iso){const y=new Date(now);y.setDate(y.getDate()-1);S.ds=S.day===localISO(y)?(S.ds||0)+1:1;S.day=iso}
+ st.dbest=Math.max(st.dbest||0,S.ds||1);
 }
-function abandon(){if(confirm("Cancel this trip? You won’t earn a stamp.")){J=null;clearTrip();view="plan";render()}}
+function checkMedals(){ // returns the medals that were just unlocked
+ const iso=localISO(new Date()),out=[];S.md=S.md||{};
+ for(const m of MEDALS)if(!S.md[m.id]&&m.v()>=m.g){S.md[m.id]=iso;out.push(m)}
+ return out;
+}
+function streakNow(){
+ if(!S.day||!S.ds)return 0;
+ const t=new Date(),y=new Date(t);y.setDate(y.getDate()-1);
+ return S.day===localISO(t)||S.day===localISO(y)?S.ds:0;
+}
+function medalHTML(m,done,cur){
+ const val=m.u==="min"?hm(cur)+" / "+hm(m.g):cur+" / "+m.g;
+ return `<div class="medal${done?"":" locked"}" data-r="${m.r}"><span class="mi" aria-hidden="true">${done?m.i:"🔒"}</span><b>${esc(m.n)}</b><span class="rar">${m.r}</span><small>${esc(m.d)}</small>${done?(S.md&&S.md[m.id]?`<small>Earned ${esc(S.md[m.id])}</small>`:""):`<div class="mp"><i style="width:${Math.round(cur/m.g*100)}%"></i></div><small>${val}</small>`}</div>`;
+}
+function medalsHTML(){
+ const rank={Common:0,Rare:1,Epic:2,Legendary:3};
+ const L=MEDALS.map(m=>{const v=m.v();return{m,cur:Math.min(v,m.g),done:!!(S.md&&S.md[m.id])||v>=m.g}});
+ const got=L.filter(x=>x.done).sort((a,b)=>rank[b.m.r]-rank[a.m.r]),todo=L.filter(x=>!x.done).sort((a,b)=>b.cur/b.m.g-a.cur/a.m.g);
+ const top=got.length?`Rarest so far: ${got[0].m.i} <b>${esc(got[0].m.n)}</b> (${got[0].m.r})`:"Finish a trip to start collecting medals.";
+ return `<h1 style="font-size:20px;margin-top:22px">Medals</h1><p class="sub">${got.length} of ${MEDALS.length} unlocked · ${top}</p><div class="medals">${[...got,...todo].map(x=>medalHTML(x.m,x.done,x.cur)).join("")}</div>`;
+}
+// ---------- change where you are (so you can start a trip from anywhere) ----------
+let locEdit=false,locNote="";
+const MIC={Flight:"\u2708\ufe0f",Train:"🚆",Bus:"🚌",Car:"🚗",Ferry:"\u26f4\ufe0f","Short hop":"🚲",Custom:"🧭"};
+function setLoc(){
+ const q=findC($("#lc").value);
+ if(!q){locNote="Pick a country from the list.";return render()}
+ locNote="";locEdit=false;const sj=$("#sj");if(sj)subject=sj.value;
+ if(q[1]==="FR")S.at=null;
+ else{const b=CAP[q[1]]||q[0];if(!CITY[b])XY[b]=[q[2],q[3]];S.at={b,c:ck(q[0]),f:flag(q[1]),cc:q[1],xy:pt(b)}}
+ save();sel=pickRoute();render();
+}
+function bindLoc(){
+ const e=$("#lcEdit"),ok=$("#lcOk"),no=$("#lcNo"),lc=$("#lc");
+ if(e)e.onclick=()=>{const sj=$("#sj");if(sj)subject=sj.value;locEdit=true;locNote="";render();const i=$("#lc");if(i)i.focus()};
+ if(ok)ok.onclick=setLoc;
+ if(no)no.onclick=()=>{locEdit=false;locNote="";render()};
+ if(lc)lc.onkeydown=ev=>{if(ev.key==="Enter")setLoc()};
+}
 
 function render(){
  routes();
@@ -300,14 +423,14 @@ function render(){
  bind();
 }
 function plan(){
- const modes=["Flight","Train","Bus","Short hop","Custom"];
+ const modes=["Flight","Train","Bus","Car","Ferry","Short hop","Custom"];
  const RL=routes(),h=here();
  const rows=RL.filter(r=>r.k===mode);
- const list=mode==="Custom"?"":(rows.length?"":`<p class="sub">No ${esc(mode.toLowerCase())} routes from ${esc(h.b)} are close enough. Try a flight or a custom trip.</p>`)+rows.map(r=>`<button class="route" data-r="${RL.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${fi(r.f)} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
+ const list=mode==="Custom"?"":(rows.length?"":`<p class="sub">${esc(emptyMsg(mode,h))}</p>`)+rows.map(r=>`<button class="route" data-r="${RL.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${fi(r.f)} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
  const cu=mode==="Custom"?`<div class="pass"><div class="in"><label for="cm">Study length in minutes</label><input id="cm" type="number" min="1" inputmode="numeric" value="${esc(custom)}"><label for="cc">Destination country</label><input id="cc" list="cl" autocomplete="off" value="${esc(ccIn)}" placeholder="e.g. Brazil"><datalist id="cl">${CT.map(c=>`<option value="${c[0]}">`).join("")}</datalist>${note?`<div class="crew" role="alert" style="margin:12px 0 0">${esc(note)}${fix?`<div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-fix="1">Use ${hm(fix)}</button><button class="btn alt" data-keep="1">Keep mine</button></div>`:""}</div>`:""}</div></div>`:"";
  const fr=sel.c&&!(mode==="Custom"&&!sel.c)?`<label for="fr">Friend in ${esc(sel.c)}</label><input id="fr" value="${esc(S.friends[sel.c]||"")}" placeholder="Name of the friend you’ll visit">`:"";
- return `<h1>Where to next?</h1><p class="sub">📍 You’re in <b>${fi(h.f)} ${esc(h.b)}</b>${S.at?` <button class="btn alt" data-home="1" style="width:auto;padding:4px 10px;font-size:13px;margin-left:6px">Back to ${HOME.b}</button>`:""}</p><p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>
- <div class="tabs" role="group" aria-label="Transport">${modes.map(m=>`<button data-m="${m}" aria-pressed="${m===mode}">${m==="Flight"?"✈️":m==="Train"?"🚆":m==="Bus"?"🚌":m==="Short hop"?"🚲":"🧭"}<br>${m}</button>`).join("")}</div>
+ return `<h1>Where to next?</h1><p class="sub">📍 You’re in <b>${fi(h.f)} ${esc(h.b)}</b> <button class="btn alt" id="lcEdit" style="width:auto;padding:4px 10px;font-size:13px;margin-left:6px">Change</button>${S.at?` <button class="btn alt" data-home="1" style="width:auto;padding:4px 10px;font-size:13px;margin-left:6px">Back to ${HOME.b}</button>`:""}${streakNow()>=2?` · 🔥 ${streakNow()}-day streak`:""}</p>${locEdit?`<div class="pass"><div class="in"><label for="lc">Where are you right now?</label><input id="lc" list="cl2" autocomplete="off" placeholder="e.g. Luxembourg"><datalist id="cl2">${CT.map(c=>`<option value="${c[0]}">`).join("")}</datalist>${locNote?`<p class="sub" role="alert" style="color:var(--warn);margin:8px 0 0">${esc(locNote)}</p>`:""}<div class="row" style="gap:8px;margin-top:12px"><button class="btn" id="lcOk">Set location</button><button class="btn alt" id="lcNo" style="width:auto">Cancel</button></div></div></div>`:""}<p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>
+ <div class="tabs" role="group" aria-label="Transport">${modes.map(m=>`<button data-m="${m}" aria-pressed="${m===mode}">${MIC[m]}<br>${m}</button>`).join("")}</div>
  ${list}${cu}
  <div class="pass"><div class="in"><label for="sj">What are you studying?</label><input id="sj" value="${esc(subject)}" placeholder="e.g. Organic chemistry">${fr}</div></div>
  ${(()=>{const c=crew(false);return c?`<div class="crew">👩‍✈️ <b>Pre-boarding announcement:</b> ${esc(c)}</div>`:""})()}<button class="btn" id="go">Board now</button>`;
@@ -317,6 +440,7 @@ function trip(){
   return `<div class="modal"><div class="pass"><div class="in"><div class="land">${fi(r.f)}</div><h1>Landed in ${esc(r.b)}</h1><div class="slam">ARRIVED</div>
   <p>You studied ${hm(r.min)} by ${r.k.toLowerCase()}${arrived.pauses?`, with ${arrived.pauses} pause${arrived.pauses>1?"s":""} and ${Math.round(arrived.delay/60000)} min of delay`:" with zero delays"}.</p>
   <p><b>${r.c} stamp added to your passport.</b></p>
+   ${arrived.medals&&arrived.medals.length?`<div class="newm"><b>🏅 New medal${arrived.medals.length>1?"s":""} unlocked!</b>${arrived.medals.map(m=>`<div class="medal" data-r="${m.r}"><span class="mi">${m.i}</span><b>${esc(m.n)}</b><span class="rar">${m.r}</span><small>${esc(m.d)}</small></div>`).join("")}</div>`:""}
   ${fr?`<p>🤝 ${esc(fr)} is waiting at arrivals.</p>`:`<p class="sub">Add a friend in ${esc(r.c)} from your passport.</p>`}
   ${(()=>{const c=crew(false);return c?`<div class="crew" style="text-align:left">👩‍✈️ ${esc(c)}</div>`:""})()}<button class="btn" id="ok">Plan next trip</button></div></div></div>`}
  if(!J)return `<h1>No trip in progress</h1><p class="sub">Check in to a trip first.</p><button class="btn" data-go="plan">Choose a trip</button>`;
@@ -349,8 +473,9 @@ function paint(){
 function pass(){
  const cs=Object.keys(S.stamps),tot=Object.values(S.stamps).reduce((a,s)=>a+s.min,0),trips=Object.values(S.stamps).reduce((a,s)=>a+s.n,0);
  const all=[...new Set([...R.map(r=>r.c),...cs])];
- return `<h1>Passport</h1><p class="sub">${cs.length} countr${cs.length===1?"y":"ies"} · ${trips} trip${trips===1?"":"s"} · ${hm(tot)} studied</p>
+ return `<h1>Passport</h1><p class="sub">${cs.length} of ${CT.length} countries · ${trips} trip${trips===1?"":"s"} · ${hm(tot)} studied</p>
  ${cs.length?`<div class="stamps">${cs.map(c=>`<div class="stamp"><span class="f">${fi(S.stamps[c].f)}</span><b>${esc(c)}</b><small>${S.stamps[c].n} visit${S.stamps[c].n>1?"s":""} · ${hm(S.stamps[c].min)}</small><small>${esc(S.stamps[c].last)}</small></div>`).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
+ ${medalsHTML()}
  <h1 style="font-size:20px;margin-top:22px">Friends abroad</h1><p class="sub">One friend per country. They’ll greet you when you land.</p>
  <div class="pass"><div class="in">${all.map(c=>`<label for="f-${esc(c)}">${fi((R.find(r=>r.c===c)||{f:S.stamps[c]&&S.stamps[c].f}).f||"")} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`).join("")}</div></div>
  ${acct()}`;
@@ -376,14 +501,14 @@ function bind(){
  const ab=$("#ab");if(ab)ab.onclick=abandon;
  const ok=$("#ok");if(ok)ok.onclick=()=>{arrived=null;view="plan";render()};
  document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});
- bindAcct();
+ bindAcct();bindLoc();
  paint();
 }
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
  const s=$("#sj");if(s)subject=s.value;
  view=b.dataset.v;render()});
 function clearTrip(){try{localStorage.removeItem("sj_trip")}catch(e){}}
-try{const t=JSON.parse(localStorage.getItem("sj_trip")||"null");if(t&&t.r&&t.total){J=t;if(!J.paused){J.paused=true;J.pausedAt=J.last||Date.now();J.pauses++}view="trip"}}catch(e){}
+try{const t=JSON.parse(localStorage.getItem("sj_trip")||"null");if(t&&t.r&&t.total){J=t;if(J.r.xy){XY[J.r.a]=J.r.xy[0];XY[J.r.b]=J.r.xy[1]}if(!J.paused){J.paused=true;J.pausedAt=J.last||Date.now();J.pauses++}view="trip"}}catch(e){}
 setInterval(tick,500);
 routes();sel=routes()[0]||sel;
 render();
