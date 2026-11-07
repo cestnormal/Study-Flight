@@ -94,6 +94,18 @@ async function check(name, fn) {
     assert.strictEqual(r.body.passport.friends.X, undefined);
     assert.strictEqual((await call("PUT", "/api/passport", { nope: 1 }, tokenA)).status, 400);
   });
+  await check("medals and stats are saved, merged upward and cleaned", async () => {
+    let r = await call("PUT", "/api/passport", { passport: { stamps: {}, st: { m_Ferry: 2, best: 4, hacked: 99, owl: "x" }, md: { first: "2026-11-01", "bad id!": "x", iron: "2026-11-02" } } }, tokenA);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.passport.st.m_Ferry, 2);
+    assert.strictEqual(r.body.passport.st.hacked, undefined);
+    assert.strictEqual(r.body.passport.md["bad id!"], undefined);
+    r = await call("PUT", "/api/passport", { passport: { stamps: {}, st: { m_Ferry: 1, best: 9 }, md: { first: "2026-12-25" } } }, tokenA);
+    assert.strictEqual(r.body.passport.st.m_Ferry, 2);
+    assert.strictEqual(r.body.passport.st.best, 9);
+    assert.strictEqual(r.body.passport.md.first, "2026-11-01");
+    assert.strictEqual(r.body.passport.md.iron, "2026-11-02");
+  });
   await check("passports are private per user", async () => {
     tokenB = (await call("POST", "/api/register", { username: "friend_b", password: "password2" })).body.token;
     assert.deepStrictEqual((await call("GET", "/api/passport", null, tokenB)).body.passport.stamps, {});
