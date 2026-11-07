@@ -25,7 +25,7 @@ const clock=t=>new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digi
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 // ---------- optional account: cloud backup & sync (the app works fully without it) ----------
-let ACC=null,acctMsg="",acctBusy=false,acctUser="",LB=[],pushT=0;
+let ACC=null,acctMsg="",acctOk=false,acctBusy=false,acctUser="",acctEmail="",acctMode="",resetTok="",mailEdit=false,ME=null,LB=[],pushT=0;
 try{ACC=JSON.parse(localStorage.getItem("sj_acct")||"null")}catch(e){}
 function setAcc(a){ACC=a;try{a?localStorage.setItem("sj_acct",JSON.stringify(a)):localStorage.removeItem("sj_acct")}catch(e){}}
 async function api(path,method,body){
@@ -56,30 +56,82 @@ async function push(){
 async function pull(){
  if(!ACC)return;
  try{const r=await api("passport");if(r.ok){mergeServer(r.body.passport);await push()}}catch(e){}
+ try{const m=await api("me");if(m.ok)ME=m.body.user}catch(e){}
  try{const l=await api("leaderboard");if(l.ok)LB=l.body.leaderboard||[]}catch(e){}
  if(view==="pass")render();
 }
+const okMail=v=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 function acct(){
- const msg=acctMsg?`<p class="sub" role="status" style="color:var(--warn);margin:10px 0 0">${esc(acctMsg)}</p>`:"";
+ const msg=acctMsg?`<p class="sub" role="status" style="color:var(--${acctOk?"ok":"warn"});margin:10px 0 0">${esc(acctMsg)}</p>`:"";
  const head=`<h1 style="font-size:20px;margin-top:22px">Account <span class="badge ok">Recommended</span></h1>`;
- if(!ACC)return head+`<p class="sub">Optional. A free account backs up your passport and lets you use it on any device. Study Flight works fine without one.</p>
+ const dis=acctBusy?" disabled":"";
+ if(acctMode==="reset")return head+`<p class="sub">Choose a new password for your account.</p>
+ <div class="pass"><div class="in"><label for="rp">New password</label><input id="rp" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+ <label for="rp2">Repeat new password</label><input id="rp2" type="password" autocomplete="new-password">${msg}
+ <div class="row" style="gap:8px;margin-top:12px"><button class="btn" id="aReset"${dis}>Save new password</button><button class="btn alt" id="aBack" style="width:auto">Cancel</button></div></div></div>`;
+ if(!ACC&&acctMode==="forgot")return head+`<p class="sub">Forgot your password? Enter the email you added to your account and we’ll send you a link to choose a new one.</p>
+ <div class="pass"><div class="in"><label for="ae">Email</label><input id="ae" type="email" autocomplete="email" value="${esc(acctEmail)}" placeholder="you@example.com">${msg}
+ <div class="row" style="gap:8px;margin-top:12px"><button class="btn" id="aSend"${dis}>Send reset link</button><button class="btn alt" id="aBack" style="width:auto">Back</button></div></div></div>`;
+ if(!ACC)return head+`<p class="sub">Optional. A free account backs up your passport and lets you use it on any device. Adding an email lets you reset your password if you forget it. Study Flight works fine without an account.</p>
  <div class="pass"><div class="in"><label for="au">Username</label><input id="au" autocomplete="username" maxlength="20" value="${esc(acctUser)}" placeholder="3 to 20 letters, numbers or _">
- <label for="ap">Password</label><input id="ap" type="password" autocomplete="current-password" placeholder="At least 8 characters">${msg}
- <div class="row" style="gap:8px;margin-top:12px"><button class="btn" id="aReg"${acctBusy?" disabled":""}>Create account</button><button class="btn alt" id="aLog"${acctBusy?" disabled":""}>Log in</button></div></div></div>`;
+ <label for="ap">Password</label><input id="ap" type="password" autocomplete="current-password" placeholder="At least 8 characters">
+ <label for="ae">Email (recommended, for password recovery)</label><input id="ae" type="email" autocomplete="email" value="${esc(acctEmail)}" placeholder="you@example.com">${msg}
+ <div class="row" style="gap:8px;margin-top:12px"><button class="btn" id="aReg"${dis}>Create account</button><button class="btn alt" id="aLog"${dis}>Log in</button></div>
+ <button class="btn alt" id="aForgot" style="width:auto;margin-top:10px;padding:8px 12px;font-size:14px">Forgot password?</button></div></div>`;
  const lb=LB.length?`<p class="sub" style="margin:14px 0 6px">Top travellers</p>`+LB.slice(0,5).map((u,i)=>`<div class="row" style="padding:4px 0"><span>${i+1}. ${esc(u.username)}</span><span class="sub" style="margin:0">${hm(u.minutes)} · ${u.countries} countr${u.countries===1?"y":"ies"}</span></div>`).join(""):"";
+ const em=ME?(ME.email?`Recovery email: <b>${esc(ME.email)}</b>`:`No recovery email yet. Add one so you can reset your password if you forget it.`):"";
+ const mailBox=!ME?"":mailEdit?`<label for="ne">Email</label><input id="ne" type="email" autocomplete="email" placeholder="you@example.com"><label for="np">Current password (to confirm it’s you)</label><input id="np" type="password" autocomplete="current-password">
+ <div class="row" style="gap:8px;margin-top:10px"><button class="btn" id="aMail"${dis}>Save email</button><button class="btn alt" id="aMailNo" style="width:auto">Cancel</button></div>`:`<button class="btn alt" id="aMailEdit" style="width:auto;margin-top:8px;padding:8px 12px;font-size:14px">${ME.email?"Change email":"Add recovery email"}</button>`;
  return head+`<p class="sub">Signed in as <b>${esc(ACC.user)}</b>. Your passport is backed up automatically.</p>
- <div class="pass"><div class="in">${msg||`<p class="sub" style="margin:0">Changes sync a moment after you make them.</p>`}${lb}
+ <div class="pass"><div class="in">${msg||`<p class="sub" style="margin:0">Changes sync a moment after you make them.</p>`}
+ ${em?`<p class="sub" style="margin:12px 0 0">${em}</p>`:""}${mailBox}${lb}
  <div class="row" style="gap:8px;margin-top:12px"><button class="btn alt" id="aOut" style="width:auto">Log out</button><button class="btn alt" id="aDel" style="width:auto">Delete account</button></div></div></div>`;
 }
 async function authGo(kind){
- const u=$("#au").value.trim(),pw=$("#ap").value;acctUser=u;
+ const u=$("#au").value.trim(),pw=$("#ap").value,em=$("#ae")?$("#ae").value.trim():"";acctUser=u;acctEmail=em;acctOk=false;
  if(!u||!pw){acctMsg="Enter a username and password.";return render()}
+ if(kind==="register"&&em&&!okMail(em)){acctMsg="That email address doesn’t look right.";return render()}
  acctBusy=true;acctMsg=kind==="register"?"Creating your account…":"Logging in…";render();
  try{
-  const r=await api(kind,"POST",{username:u,password:pw});
+  const r=await api(kind,"POST",kind==="register"?{username:u,password:pw,email:em}:{username:u,password:pw});
   if(!r.ok){acctMsg=r.status===404||r.status===405?"Accounts only work on the deployed website, not when opening the file directly.":(r.body.error||"Something went wrong.")}
-  else{setAcc({token:r.body.token,user:r.body.user.username});acctMsg="";acctUser="";acctBusy=false;await pull();return render()}
+  else{setAcc({token:r.body.token,user:r.body.user.username});ME=r.body.user;acctMsg="";acctUser="";acctEmail="";acctBusy=false;await pull();return render()}
  }catch(e){acctMsg="Can’t reach the server. Check your connection. Your passport still works offline."}
+ acctBusy=false;render();
+}
+async function sendReset(){
+ const em=$("#ae").value.trim();acctEmail=em;acctOk=false;
+ if(!okMail(em)){acctMsg="Enter a valid email address.";return render()}
+ acctBusy=true;acctMsg="Sending…";render();
+ try{
+  const r=await api("forgot","POST",{email:em});
+  if(r.ok){acctOk=true;acctMsg="If that email belongs to an account, a reset link is on its way. Check your inbox and spam folder. The link works for 1 hour."}
+  else acctMsg=r.status===404||r.status===405?"Password reset only works on the deployed website.":(r.body.error||"Something went wrong.");
+ }catch(e){acctMsg="Can’t reach the server. Check your connection."}
+ acctBusy=false;render();
+}
+async function saveNewPassword(){
+ const a=$("#rp").value,b=$("#rp2").value;acctOk=false;
+ if(a.length<8){acctMsg="Use at least 8 characters.";return render()}
+ if(a!==b){acctMsg="The two passwords don’t match.";return render()}
+ acctBusy=true;acctMsg="Saving…";render();
+ try{
+  const r=await api("reset","POST",{token:resetTok,password:a});
+  if(r.ok){setAcc({token:r.body.token,user:r.body.user.username});ME=r.body.user;acctMode="";resetTok="";acctBusy=false;acctOk=true;acctMsg="Password updated. You’re signed in.";await pull();return render()}
+  acctMsg=r.body.error||"Something went wrong.";
+ }catch(e){acctMsg="Can’t reach the server. Check your connection."}
+ acctBusy=false;render();
+}
+async function saveEmail(){
+ const em=$("#ne").value.trim(),pw=$("#np").value;acctOk=false;
+ if(!okMail(em)){acctMsg="Enter a valid email address.";return render()}
+ if(!pw){acctMsg="Enter your current password to confirm.";return render()}
+ acctBusy=true;acctMsg="Saving…";render();
+ try{
+  const r=await api("me","PUT",{email:em,password:pw});
+  if(r.ok){ME=r.body.user;mailEdit=false;acctOk=true;acctMsg="Recovery email saved."}
+  else if(ACC)acctMsg=r.body.error||"Something went wrong.";
+ }catch(e){acctMsg="Can’t reach the server."}
  acctBusy=false;render();
 }
 function bindAcct(){
@@ -87,12 +139,20 @@ function bindAcct(){
  if(r)r.onclick=()=>authGo("register");
  if(l)l.onclick=()=>authGo("login");
  const ap=$("#ap");if(ap)ap.onkeydown=e=>{if(e.key==="Enter")authGo("login")};
+ const fg=$("#aForgot");if(fg)fg.onclick=()=>{acctUser=$("#au").value.trim();acctEmail=$("#ae").value.trim();acctMode="forgot";acctMsg="";acctOk=false;render();const i=$("#ae");if(i)i.focus()};
+ const bk=$("#aBack");if(bk)bk.onclick=()=>{acctMode="";resetTok="";acctMsg="";acctOk=false;render()};
+ const sd=$("#aSend");if(sd){sd.onclick=sendReset;const i=$("#ae");if(i)i.onkeydown=e=>{if(e.key==="Enter")sendReset()}}
+ const rs=$("#aReset");if(rs){rs.onclick=saveNewPassword;const i=$("#rp2");if(i)i.onkeydown=e=>{if(e.key==="Enter")saveNewPassword()}}
+ const me=$("#aMailEdit");if(me)me.onclick=()=>{mailEdit=true;acctMsg="";acctOk=false;render();const i=$("#ne");if(i)i.focus()};
+ const mn=$("#aMailNo");if(mn)mn.onclick=()=>{mailEdit=false;acctMsg="";render()};
+ const ms=$("#aMail");if(ms)ms.onclick=saveEmail;
  if(o)o.onclick=async()=>{
-  if(!(await push())){acctMsg="Couldn’t back up your passport right now, so you’re still signed in. Try again when you’re online.";return render()}
-  S={stamps:{},friends:{}};saveLocal();setAcc(null);LB=[];acctMsg="Logged out. Your passport is saved in your account; log in to get it back.";render()};
+  if(!(await push())){acctOk=false;acctMsg="Couldn’t back up your passport right now, so you’re still signed in. Try again when you’re online.";return render()}
+  S={stamps:{},friends:{}};saveLocal();setAcc(null);LB=[];ME=null;mailEdit=false;acctOk=false;acctMsg="Logged out. Your passport is saved in your account; log in to get it back.";render()};
  if(d)d.onclick=async()=>{
   if(!confirm("Delete your account and its cloud backup? Your passport on this device is kept."))return;
-  try{const x=await api("me","DELETE");if(x.ok){setAcc(null);LB=[];acctMsg="Account deleted.";return render()}acctMsg=x.body.error||"Couldn’t delete the account."}
+  acctOk=false;
+  try{const x=await api("me","DELETE");if(x.ok){setAcc(null);LB=[];ME=null;acctMsg="Account deleted.";return render()}acctMsg=x.body.error||"Couldn’t delete the account."}
   catch(e){acctMsg="Can’t reach the server."}render()};
 }
 
@@ -509,6 +569,7 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
  view=b.dataset.v;render()});
 function clearTrip(){try{localStorage.removeItem("sj_trip")}catch(e){}}
 try{const t=JSON.parse(localStorage.getItem("sj_trip")||"null");if(t&&t.r&&t.total){J=t;if(J.r.xy){XY[J.r.a]=J.r.xy[0];XY[J.r.b]=J.r.xy[1]}if(!J.paused){J.paused=true;J.pausedAt=J.last||Date.now();J.pauses++}view="trip"}}catch(e){}
+if(/^#reset=[a-f0-9]{64}$/.test(location.hash)){resetTok=location.hash.slice(7);try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}acctMode="reset";view="pass"}
 setInterval(tick,500);
 routes();sel=routes()[0]||sel;
 render();
