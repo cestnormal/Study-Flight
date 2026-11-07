@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const db = require("./_db");
 
 const USERNAME = /^[A-Za-z0-9_]{3,20}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MEDAL_ID = /^[a-z0-9_]{1,24}$/;
 const ST_KEYS = ["m_Flight", "m_Train", "m_Bus", "m_Car", "m_Ferry", "m_Bike", "owl", "lark", "best", "long", "iron", "turb", "dbest"];
 
@@ -30,8 +31,11 @@ function ready(res) {
   return false;
 }
 
+// v = when the password last changed, so a password reset signs out every older login.
+const pwv = (u) => (u && u.pw_at ? new Date(u.pw_at).getTime() : 0);
+
 function sign(user) {
-  return jwt.sign({ sub: user.id, u: user.username }, process.env.JWT_SECRET, { expiresIn: "30d" });
+  return jwt.sign({ sub: user.id, u: user.username, v: pwv(user) }, process.env.JWT_SECRET, { expiresIn: "30d" });
 }
 
 async function authed(req) {
@@ -39,17 +43,38 @@ async function authed(req) {
   if (!h || !h.startsWith("Bearer ")) return null;
   try {
     const p = jwt.verify(h.slice(7), process.env.JWT_SECRET);
-    return await db.findById(p.sub);
+    const user = await db.findById(p.sub);
+    return user && (p.v || 0) === pwv(user) ? user : null;
   } catch (e) {
     return null;
   }
 }
 
+// Returns a clean lowercase email, or "" if it is not a valid address.
+function normEmail(v) {
+  const e = typeof v === "string" ? v.trim().toLowerCase() : "";
+  return e.length <= 254 && EMAIL.test(e) ? e : "";
+}
+
+// The browser only ever sees a masked email, like g***@gmail.com.
+function maskEmail(e) {
+  if (!e) return null;
+  const [name, domain] = e.split("@");
+  return name[0] + "***@" + domain;
+}
+const publicUser = (u) => ({ username: u.username, email: maskEmail(u.email) });
+
+// The address used in reset emails. Set SITE_URL in Vercel; never trust the request's Host header.
+function siteUrl() {
+  const u = process.env.SITE_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? "https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL : "");
+  return u.replace(/\/+$/, "");
+}
+
 // Small per-instance throttle against password guessing. Not a full defence on
 // serverless (each instance has its own memory) but it stops casual abuse.
 const hits = new Map();
-function throttled(req, max = 10, windowMs = 60000) {
-  const ip = String((req.headers && req.headers["x-forwarded-for"]) || "local").split(",")[0].trim();
+function throttled(req, max = 10, windowMs = 60000, name = "") {
+  const ip = String((req.headers && req.headers["x-forwarded-for"]) || "local").split(",")[0].trim() + "|" + name;
   const now = Date.now();
   const list = (hits.get(ip) || []).filter((t) => now - t < windowMs);
   list.push(now);
@@ -127,4 +152,4 @@ function totals(data) {
   return { countries: v.length, trips: v.reduce((a, s) => a + s.n, 0), minutes: v.reduce((a, s) => a + s.min, 0) };
 }
 
-module.exports = { USERNAME, readBody, allow, ready, sign, authed, throttled, clean, merge, totals };
+module.exports = { USERNAME, readBody, allow, ready, sign, authed, throttled, clean, merge, totals, normEmail, publicUser, siteUrl };
