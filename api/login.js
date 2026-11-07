@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
     const user = await db.findByName(username.toLowerCase());
     const ok = await bcrypt.compare(password, user ? user.password : DUMMY);
     if (!user || !ok) return res.status(401).json({ error: "Wrong username or password." });
-    res.json({ token: L.sign(user), user: { username: user.username } });
+    res.json({ token: L.sign(user), user: L.publicUser(user) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Something went wrong." });
