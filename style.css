@@ -60,3 +60,9 @@ nav button{white-space:nowrap}
 nav button[data-v="account"]{color:var(--acc);font-weight:800}
 .leaderboard-card{margin-top:18px}
 .stamp .f{display:block;line-height:1.2;margin-bottom:5px}
+
+/* Flag images (flags.png is a 14-column sprite of all countries) */
+.fl{display:inline-block;width:1.4em;height:1.05em;vertical-align:-.2em;background:url(flags.png) no-repeat;background-size:19.6em 15.75em}
+
+/* Bottom menu: let the six tabs scroll instead of overlapping on narrow phones */
+nav button{flex:1 0 auto;padding:12px 10px}
