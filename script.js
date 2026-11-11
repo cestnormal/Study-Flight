@@ -299,13 +299,25 @@ function paint(){
  const cr=crew(true),ce=$("#crew");
  if(ce){ce.hidden=!cr;if(cr&&ce.dataset.t!==cr){ce.dataset.t=cr;ce.innerHTML="👩‍✈️ <b>Cabin crew:</b> "+esc(cr)}}
 }
+
+// --- FIXED PASSPORT RENDER (Fallback flag support for ES, LU, RU, KR, etc.) ---
 function pass(){
  const cs=Object.keys(S.stamps),tot=Object.values(S.stamps).reduce((a,s)=>a+s.min,0),trips=Object.values(S.stamps).reduce((a,s)=>a+s.n,0);
  const all=[...new Set([...R.map(r=>r.c),...cs])];
  return `<h1>Passport</h1><p class="sub">${cs.length} countr${cs.length===1?"y":"ies"} · ${trips} trip${trips===1?"":"s"} · ${hm(tot)} studied</p>
- ${cs.length?`<div class="stamps">${cs.map(c=>`<div class="stamp"><span class="f">${S.stamps[c].f}</span><b>${esc(c)}</b><small>${S.stamps[c].n} visit${S.stamps[c].n>1?"s":""} · ${hm(S.stamps[c].min)}</small><small>${esc(S.stamps[c].last)}</small></div>`).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
+ ${cs.length?`<div class="stamps">${cs.map(c=>{
+   const st = S.stamps[c];
+   const countryInfo = findC(c);
+   const stampFlag = st.f || (countryInfo ? flag(countryInfo[1]) : "🌍");
+   return `<div class="stamp"><span class="f">${stampFlag}</span><b>${esc(c)}</b><small>${st.n} visit${st.n>1?"s":""} · ${hm(st.min)}</small><small>${esc(st.last)}</small></div>`;
+ }).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
  <h1 style="font-size:20px;margin-top:22px">Friends abroad</h1><p class="sub">One friend per country. They’ll greet you when you land.</p>
- <div class="pass"><div class="in">${all.map(c=>`<label for="f-${esc(c)}">${(R.find(r=>r.c===c)||{f:S.stamps[c]&&S.stamps[c].f}).f||""} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`).join("")}</div></div>`;
+ <div class="pass"><div class="in">${all.map(c=>{
+   const routeMatch = R.find(r=>r.c===c);
+   const countryMatch = findC(c);
+   const fIcon = (routeMatch ? routeMatch.f : null) || (countryMatch ? flag(countryMatch[1]) : "🌍");
+   return `<label for="f-${esc(c)}">${fIcon} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`;
+ }).join("")}</div></div>`;
 }
 
 function accountPage(){
