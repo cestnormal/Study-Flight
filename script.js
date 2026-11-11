@@ -117,7 +117,7 @@ function landPts(st){
 }
 const h1=i=>{const x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)};
 const STARS=Array.from({length:90},(_,i)=>[h1(i)*600,h1(i+99)*600,h1(i+7)*1.3+.4,h1(i+31)*.5+.3]);
-const GROUND=["🚆","🚌","🚲"];
+const GROUND=["\u{1F686}","\u{1F68C}","\u{1F6B2}"];
 function sunVec(){const n=new Date(),doy=(n-new Date(n.getFullYear(),0,0))/864e5,dec=23.44*Math.sin(2*Math.PI*(doy-81)/365)*Math.PI/180,hr=n.getUTCHours()+n.getUTCMinutes()/60,lo=-(hr-12)*15*Math.PI/180;return [Math.cos(dec)*Math.cos(lo),Math.cos(dec)*Math.sin(lo),Math.sin(dec)]}
 function drawPlane(g,s){g.beginPath();g.moveTo(s,0);g.lineTo(s*.3,-s*.14);g.lineTo(-s*.2,-s*.85);g.lineTo(-s*.42,-s*.85);g.lineTo(-s*.12,-s*.12);g.lineTo(-s*.62,-s*.1);g.lineTo(-s*.78,-s*.38);g.lineTo(-s*.9,-s*.38);g.lineTo(-s*.78,0);g.lineTo(-s*.9,s*.38);g.lineTo(-s*.78,s*.38);g.lineTo(-s*.62,s*.1);g.lineTo(-s*.12,s*.12);g.lineTo(-s*.42,s*.85);g.lineTo(-s*.2,s*.85);g.lineTo(s*.3,s*.14);g.closePath();g.fill()}
 const curP=()=>J?Math.min(1,(J.done+(J.paused?0:Date.now()-J.last))/J.total):0;
@@ -300,24 +300,27 @@ function paint(){
  if(ce){ce.hidden=!cr;if(cr&&ce.dataset.t!==cr){ce.dataset.t=cr;ce.innerHTML="👩‍✈️ <b>Cabin crew:</b> "+esc(cr)}}
 }
 
-// --- FIXED PASSPORT RENDER (Fallback flag support for ES, LU, RU, KR, etc.) ---
+function countryFlag(country, legacy="") {
+ const entry=CT.find(x=>x[0].toLowerCase()===String(country).toLowerCase());
+ const code=entry?.[1] || (/^[A-Z]{2}$/.test(String(legacy))?String(legacy):"");
+ if(!code)return "🌍";
+ return String.fromCodePoint(...[...code].map(ch=>127397+ch.charCodeAt(0)));
+}
+function leaderboardPanel(){
+ return `<section class="pass leaderboard-card"><div class="in">
+ <div class="row"><b>Global leaderboard</b><button class="btn alt" id="refresh-board" style="width:auto;padding:7px 10px">Refresh</button></div>
+ <p class="sub">Top students ranked by completed study time.</p>
+ <div id="leaderboard" aria-live="polite">Loading leaderboard…</div>
+ </div></section>`;
+}
+
 function pass(){
  const cs=Object.keys(S.stamps),tot=Object.values(S.stamps).reduce((a,s)=>a+s.min,0),trips=Object.values(S.stamps).reduce((a,s)=>a+s.n,0);
  const all=[...new Set([...R.map(r=>r.c),...cs])];
  return `<h1>Passport</h1><p class="sub">${cs.length} countr${cs.length===1?"y":"ies"} · ${trips} trip${trips===1?"":"s"} · ${hm(tot)} studied</p>
- ${cs.length?`<div class="stamps">${cs.map(c=>{
-   const st = S.stamps[c];
-   const countryInfo = findC(c);
-   const stampFlag = st.f || (countryInfo ? flag(countryInfo[1]) : "🌍");
-   return `<div class="stamp"><span class="f">${stampFlag}</span><b>${esc(c)}</b><small>${st.n} visit${st.n>1?"s":""} · ${hm(st.min)}</small><small>${esc(st.last)}</small></div>`;
- }).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
+ ${cs.length?`<div class="stamps">${cs.map(c=>`<div class="stamp"><span class="f" role="img" aria-label="${esc(c)} flag">${countryFlag(c,S.stamps[c].f)}</span><b>${esc(c)}</b><small>${S.stamps[c].n} visit${S.stamps[c].n>1?"s":""} · ${hm(S.stamps[c].min)}</small><small>${esc(S.stamps[c].last)}</small></div>`).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
  <h1 style="font-size:20px;margin-top:22px">Friends abroad</h1><p class="sub">One friend per country. They’ll greet you when you land.</p>
- <div class="pass"><div class="in">${all.map(c=>{
-   const routeMatch = R.find(r=>r.c===c);
-   const countryMatch = findC(c);
-   const fIcon = (routeMatch ? routeMatch.f : null) || (countryMatch ? flag(countryMatch[1]) : "🌍");
-   return `<label for="f-${esc(c)}">${fIcon} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`;
- }).join("")}</div></div>`;
+ <div class="pass"><div class="in">${all.map(c=>`<label for="f-${esc(c)}">${countryFlag(c,(R.find(r=>r.c===c)||{}).f||(S.stamps[c]&&S.stamps[c].f))} ${esc(c)}</label><input id="f-${esc(c)}" data-fc="${esc(c)}" value="${esc(S.friends[c]||"")}" placeholder="Friend’s name">`).join("")}</div></div>${leaderboardPanel()}`;
 }
 
 function accountPage(){
@@ -335,13 +338,10 @@ function updateAchievements(){
  for(const a of achievementList())if(a[4]&&!S.md[a[0]])S.md[a[0]]=new Date().toISOString().slice(0,10);
  save();
 }
-
-// --- FIXED MEDAL RENDERING (Proper Spacing & HTML Hierarchy) ---
 function club(){
  const medals=achievementList();
- return `<h1>Study Flight Club</h1><p class="sub">Your milestones and the global study leaderboard.</p><div class="pass"><div class="in"><b>Achievements</b><div class="stamps" style="margin-top:12px">${medals.map(x=>`<div class="stamp medal-card" style="transform:none;opacity:${x[4]?1:.48}"><div class="row" style="justify-content:flex-start;gap:8px;"><span class="f">${x[1]}</span><div><b>${esc(x[2])}</b>${x[5]?`<span class="badge" style="font-size:10px;margin-left:4px;padding:1px 6px;">${esc(x[5])}</span>`:''}</div></div><small style="margin-top:4px;display:block;">${esc(x[3])}</small><small style="margin-top:6px;display:block;font-weight:600;color:var(--blue);">${S.md&&S.md[x[0]]?"Unlocked · "+esc(S.md[x[0]]):"Locked"}</small></div>`).join("")}</div></div></div><div class="pass"><div class="in"><div class="row"><b>Global leaderboard</b><button class="btn alt" id="refresh-board" style="width:auto;padding:7px 10px">Refresh</button></div><p class="sub">Ranked by completed study minutes.</p><div id="leaderboard">Loading leaderboard…</div></div></div>`;
+ return `<h1>Study Flight Club</h1><p class="sub">Your milestones and the global study leaderboard.</p><div class="pass"><div class="in"><b>Achievements</b><div class="stamps" style="margin-top:12px">${medals.map(x=>`<div class="stamp" style="transform:none;opacity:${x[4]?1:.48}"><span class="f">${x[1]}</span><b>${x[2]}</b><small>${x[3]}</small><small>${S.md&&S.md[x[0]]?"Unlocked · "+esc(S.md[x[0]]):"Locked"}</small></div>`).join("")}</div></div></div><div class="pass"><div class="in"><div class="row"><b>Global leaderboard</b><button class="btn alt" id="refresh-board" style="width:auto;padding:7px 10px">Refresh</button></div><p class="sub">Ranked by completed study minutes.</p><div id="leaderboard">Loading leaderboard…</div></div></div>`;
 }
-
 async function fillLeaderboard(){const el=$("#leaderboard");if(!el)return;try{const d=await api("/api/leaderboard",{headers:{}});el.innerHTML=d.leaderboard.length?d.leaderboard.map((u,i)=>`<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><span><b>#${i+1}</b> ${esc(u.username)}${account.user&&u.username===account.user.username?" (you)":""}</span><b>${hm(u.minutes)}</b></div>`).join(""):"No completed study trips yet. Be the first!";}catch(e){el.textContent=e.message.includes("not set up")?"Leaderboard will be available once the database is connected.":e.message}}
 
 function bind(){
@@ -373,7 +373,7 @@ function bind(){
  const form=$("#auth-form");if(form)form.onsubmit=async e=>{e.preventDefault();const username=$("#auth-user").value.trim(),password=$("#auth-pass").value;account.busy=true;account.message="Please wait…";render();try{const d=await api(account.mode==="signup"?"/api/register":"/api/login",{method:"POST",body:JSON.stringify({username,password})});account.token=d.token;localStorage.setItem("sf_token",d.token);account.user=d.user;await syncPassport();account.message="";view="account";render()}catch(err){account.message=err.message;render()}};
  const logout=$("#logout");if(logout)logout.onclick=()=>{account.token="";account.user=null;localStorage.removeItem("sf_token");view="account";render()};
  const refresh=$("#refresh-board");if(refresh)refresh.onclick=fillLeaderboard;
- if(view==="club")fillLeaderboard();
+ if(view==="club"||view==="pass")fillLeaderboard();
  document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{view=b.dataset.go;render()});
  paint();
 }
