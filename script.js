@@ -300,18 +300,42 @@ function paint(){
  if(ce){ce.hidden=!cr;if(cr&&ce.dataset.t!==cr){ce.dataset.t=cr;ce.innerHTML="👩‍✈️ <b>Cabin crew:</b> "+esc(cr)}}
 }
 
-function countryFlag(country, legacy="") {
- const entry=CT.find(x=>x[0].toLowerCase()===String(country).toLowerCase());
- const code=entry?.[1] || (/^[A-Z]{2}$/.test(String(legacy))?String(legacy):"");
- if(!code)return "🌍";
- return String.fromCodePoint(...[...code].map(ch=>127397+ch.charCodeAt(0)));
-}
-function leaderboardPanel(){
- return `<section class="pass leaderboard-card"><div class="in">
- <div class="row"><b>Global leaderboard</b><button class="btn alt" id="refresh-board" style="width:auto;padding:7px 10px">Refresh</button></div>
- <p class="sub">Top students ranked by completed study time.</p>
- <div id="leaderboard" aria-live="polite">Loading leaderboard…</div>
- </div></section>`;
+function countryFlag(country, legacy = "") {
+  const aliases = {
+    uk: "united kingdom",
+    england: "united kingdom",
+    scotland: "united kingdom",
+    wales: "united kingdom",
+    "great britain": "united kingdom",
+    us: "usa",
+    "united states": "usa",
+    america: "usa",
+    uae: "united arab emirates",
+    dubai: "united arab emirates",
+    korea: "south korea"
+  };
+
+  const raw = String(country || "").trim().toLowerCase();
+  const canonical = aliases[raw] || ALIAS[raw] || raw;
+
+  const entry = CT.find(c =>
+    c[0].toLowerCase() === canonical ||
+    c[1].toLowerCase() === raw
+  );
+
+  const code = entry ? entry[1] : "";
+
+  if (code) {
+    return String.fromCodePoint(
+      ...[...code].map(ch => 127397 + ch.charCodeAt(0))
+    );
+  }
+
+  if (/\p{Extended_Pictographic}/u.test(String(legacy))) {
+    return String(legacy);
+  }
+
+  return "🌍";
 }
 
 function pass(){
