@@ -1,22 +1,9 @@
-const R=[
-{m:"✈️",k:"Flight",a:"Paris",b:"Delhi",c:"India",f:"🇮🇳",min:510},
-{m:"✈️",k:"Flight",a:"Paris",b:"New York",c:"USA",f:"🇺🇸",min:490},
-{m:"✈️",k:"Flight",a:"Paris",b:"Tokyo",c:"Japan",f:"🇯🇵",min:720},
-{m:"✈️",k:"Flight",a:"Paris",b:"Dubai",c:"UAE",f:"🇦🇪",min:405},
-{m:"✈️",k:"Flight",a:"Paris",b:"Sydney",c:"Australia",f:"🇦🇺",min:1260},
-{m:"🚆",k:"Train",a:"Paris",b:"London",c:"UK",f:"🇬🇧",min:140},
-{m:"🚆",k:"Train",a:"Paris",b:"Amsterdam",c:"Netherlands",f:"🇳🇱",min:200},
-{m:"🚆",k:"Train",a:"Paris",b:"Milan",c:"Italy",f:"🇮🇹",min:420},
-{m:"🚌",k:"Bus",a:"Paris",b:"Brussels",c:"Belgium",f:"🇧🇪",min:190},
-{m:"🚌",k:"Bus",a:"Paris",b:"Barcelona",c:"Spain",f:"🇪🇸",min:600},
-{m:"🚌",k:"Bus",a:"Paris",b:"Berlin",c:"Germany",f:"🇩🇪",min:600},
-{m:"🚲",k:"Short hop",a:"Home",b:"Library",c:"France",f:"🇫🇷",min:25}
-];
+let R=[];
 const PEN=5*60000; // each pause adds 5 min extra study
 let S={stamps:{},friends:{}};
 try{const x=localStorage.getItem("sj1");if(x)S=JSON.parse(x)}catch(e){}
 const save=()=>{try{localStorage.setItem("sj1",JSON.stringify(S))}catch(e){}};
-let view="plan",mode="Flight",sel=R[0],J=null,subject="",custom="",arrived=null;
+let view="plan",mode="Flight",sel={},J=null,subject="",custom="",arrived=null;
 let account={token:localStorage.getItem("sf_token")||"",user:null,busy:false,message:"",mode:"login"};
 const api=async(path,opts={})=>{const headers={"Content-Type":"application/json",...(account.token?{Authorization:"Bearer "+account.token}:{})};const res=await fetch(path,{...opts,headers:{...headers,...(opts.headers||{})}});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||"Request failed");return data};
 async function syncPassport(){if(!account.token)return;try{const data=await api("/api/passport",{method:"PUT",body:JSON.stringify({passport:S})});S={...S,...data.passport};save()}catch(e){if(/log in|token/i.test(e.message)){account.token="";account.user=null;localStorage.removeItem("sf_token")}}}
@@ -24,7 +11,7 @@ async function loadAccount(){if(!account.token)return;try{const d=await api("/ap
 
 const $=s=>document.querySelector(s);
 const fmt=ms=>{ms=Math.max(0,Math.ceil(ms/1000));const h=Math.floor(ms/3600),m=Math.floor(ms%3600/60),s=ms%60;return (h?h+":"+String(m).padStart(2,"0"):m)+":"+String(s).padStart(2,"0")};
-const hm=m=>m>=60?Math.floor(m/60)+"h "+(m%60?m%60+"m":""):m+"m";
+const hm=m=>m>=60?(Math.floor(m/60)+"h "+(m%60?m%60+"m":"")).trim():m+"m";
 const clock=t=>new Date(t).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -56,17 +43,65 @@ const CT="France,FR,48.9,2.35;United Kingdom,GB,51.5,-0.1;Ireland,IE,53.3,-6.3;S
 CT.sort((a,b)=>a[0].localeCompare(b[0]));
 const ALIAS={burma:"myanmar","czech republic":"czechia","cote d'ivoire":"ivory coast","côte d’ivoire":"ivory coast",drc:"democratic republic of the congo",congo:"republic of the congo",swaziland:"eswatini",turkiye:"turkey",holland:"netherlands",korea:"south korea","east timor":"timor-leste",vatican:"vatican city","cape verde":"cabo verde",uk:"united kingdom",england:"united kingdom","united states":"usa",us:"usa",america:"usa",uae:"united arab emirates",dubai:"united arab emirates"};
 const flag=cc=>String.fromCodePoint(...[...cc].map(c=>127397+c.charCodeAt(0)));
+// ---------- flags as images (works on every device, incl. Windows) ----------
+const FLC="AD,AE,AF,AG,AL,AM,AO,AR,AT,AU,AZ,BA,BB,BD,BE,BF,BG,BH,BI,BJ,BN,BO,BR,BS,BT,BW,BY,BZ,CA,CD,CF,CG,CH,CI,CL,CM,CN,CO,CR,CU,CV,CY,CZ,DE,DJ,DK,DM,DO,DZ,EC,EE,EG,ER,ES,ET,FI,FJ,FM,FR,GA,GB,GD,GE,GH,GM,GN,GQ,GR,GT,GW,GY,HN,HR,HT,HU,ID,IE,IL,IN,IQ,IR,IS,IT,JM,JO,JP,KE,KG,KH,KI,KM,KN,KP,KR,KW,KZ,LA,LB,LC,LI,LK,LR,LS,LT,LU,LV,LY,MA,MC,MD,ME,MG,MH,MK,ML,MM,MN,MR,MT,MU,MV,MW,MX,MY,MZ,NA,NE,NG,NI,NL,NO,NP,NR,NZ,OM,PA,PE,PG,PH,PK,PL,PS,PT,PW,PY,QA,RO,RS,RU,RW,SA,SB,SC,SD,SE,SG,SI,SK,SL,SM,SN,SO,SR,SS,ST,SV,SY,SZ,TD,TG,TH,TJ,TL,TM,TN,TO,TR,TT,TV,TW,TZ,UA,UG,US,UY,UZ,VA,VC,VE,VN,VU,WS,XK,YE,ZA,ZM,ZW".split(",");
+const fe=e=>{const m=[...(e||"")].map(c=>c.codePointAt(0));if(m.length===2&&m.every(x=>x>=127462&&x<=127487)){const c=String.fromCharCode(m[0]-127397,m[1]-127397),i=FLC.indexOf(c);if(i>=0)return `<span class="fl" role="img" aria-label="${c} flag" style="background-position:${-(i%14)*1.4}em ${-Math.floor(i/14)*1.05}em"></span>`}return e||""};
+
+// ---------- starting location ----------
+const DEG=Math.PI/180;
+const distKm=(la1,lo1,la2,lo2)=>{const h=x=>Math.sin(x/2)**2,a=h((la2-la1)*DEG)+Math.cos(la1*DEG)*Math.cos(la2*DEG)*h((lo2-lo1)*DEG);return 12742*Math.asin(Math.sqrt(a))};
+const SPEED={Flight:[850,30],Train:[160,10],Bus:[65,10]};
+const tmins=(k,km)=>Math.max(15,Math.round(km/SPEED[k][0]*60+SPEED[k][1]));
+const CONT={};
+for(const [g,l] of Object.entries({E:"AD AL AM AT AZ BA BE BG BY CH CY CZ DE DK EE ES FI FR GB GE GR HR HU IE IS IT LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SK SM TR UA VA XK KZ AF BD BH BN BT CN ID IL IN IQ IR JO JP KG KH KP KR KW LA LB LK MM MN MV MY NP OM PH PK PS QA SA SG SY TH TJ TL TM TW UZ VN YE AE",A:"AO BF BI BJ BW CD CF CG CI CM CV DJ DZ EG ER ET GA GH GM GN GQ GW KE KM LR LS LY MA MG ML MR MU MW MZ NA NE NG RW SC SD SL SN SO SS ST SZ TD TG TN TZ UG ZA ZM ZW",N:"AG BB BS BZ CA CR CU DM DO GD GT HN HT JM KN LC MX NI PA SV TT US VC",S:"AR BO BR CL CO EC GY PE PY SR UY VE",O:"AU FJ FM KI MH NR NZ PG PW SB TO TV VU WS"}))for(const c of l.split(" "))CONT[c]=g;
+const ISL=new Set("IE IS JP LK PH ID NZ AU CU JM DO HT CY MT MV BH TT MG KM MU SC CV ST TW BN FJ WS TO VU SB PG KI NR MH FM PW TV AG BB BS DM GD KN LC VC TL".split(" "));
+const POP=new Set("US GB FR DE ES IT JP CN AU CA AE SG TH TR IN BR MX KR NL CH EG ZA SA ID NZ AR PT GR RU SE NO DK AT BE IE PL CZ HU MA KE NG CO PE CL VN MY PH IL QA".split(" "));
+const byLand=(a,b)=>{const t=["FR","BE","NL"];if((a==="GB"&&t.includes(b))||(b==="GB"&&t.includes(a)))return true;return CONT[a]&&CONT[a]===CONT[b]&&!ISL.has(a)&&!ISL.has(b)};
+let O=null,locEdit=false;
+try{O=JSON.parse(localStorage.getItem("sf_home")||"null")}catch(e){}
+function buildRoutes(){
+ if(!O){R=[];sel={};return}
+ const from=[O.lat,O.lon],all=CT.filter(c=>c[1]!==O.code).map(c=>({c,km:distKm(O.lat,O.lon,c[2],c[3])}));
+ const mk=(k,m,x)=>({m,k,a:O.name,b:x.c[0],c:x.c[0],f:flag(x.c[1]),min:tmins(k,x.km),o:from,d:[x.c[2],x.c[3]]});
+ const used=new Set(),out=[];
+ for(const t of [90,180,300,480,720,960,1200]){const tol=Math.max(60,t*.35);let best=null,bd=1e9;for(const pop of [true,false]){for(const x of all){if(used.has(x.c[0])||(pop&&!POP.has(x.c[1])))continue;const d=Math.abs(tmins("Flight",x.km)-t);if(d<bd){bd=d;best=x}}if(best&&bd<=tol)break;best=null;bd=1e9}if(best){used.add(best.c[0]);out.push(mk("Flight","\u2708\ufe0f",best))}}
+ all.filter(x=>x.km<=1200&&byLand(O.code,x.c[1])).sort((a,b)=>a.km-b.km).slice(0,4).forEach(x=>out.push(mk("Train","\u{1F686}",x)));
+ all.filter(x=>x.km<=700&&byLand(O.code,x.c[1])).sort((a,b)=>a.km-b.km).slice(0,4).forEach(x=>out.push(mk("Bus","\u{1F68C}",x)));
+ [["Library",25],["Campus",60]].forEach(([n,m],i)=>out.push({m:"\u{1F6B2}",k:"Short hop",a:O.name,b:n,c:O.country,f:flag(O.code),min:m,o:from,d:[O.lat+.02*(i+1),O.lon+.02*(i+1)]}));
+ R=out.sort((a,b)=>a.min-b.min);
+ if(!sel.custom)sel=R.find(r=>r.k===mode)||{};
+}
+function setOrigin(o){O={...o,lat:Math.round(o.lat*100)/100,lon:Math.round(o.lon*100)/100};try{localStorage.setItem("sf_home",JSON.stringify(O))}catch(e){}locEdit=false;buildRoutes();render()}
+function locate(){
+ const msg=$("#geomsg");
+ if(!navigator.geolocation){msg.textContent="Location isn\u2019t available in this browser. Choose your country below.";return}
+ msg.textContent="Finding you\u2026";
+ navigator.geolocation.getCurrentPosition(async pos=>{
+  const la=pos.coords.latitude,lo=pos.coords.longitude;let code="",city="";
+  try{const r=await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${la}&longitude=${lo}&localityLanguage=en`),d=await r.json();code=d.countryCode||"";city=d.city||d.locality||""}catch(e){}
+  let c=CT.find(x=>x[1]===code);
+  if(!c)c=CT.map(x=>[distKm(la,lo,x[2],x[3]),x]).sort((a,b)=>a[0]-b[0])[0][1];
+  setOrigin({name:city||c[0],country:c[0],code:c[1],lat:la,lon:lo,gps:true});
+ },err=>{const m=$("#geomsg");if(m)m.textContent=(err&&err.code===1?"Location permission was denied.":"Couldn\u2019t get your location.")+" Choose your country below."},{timeout:10000,maximumAge:600000});
+}
+function placePicker(){return `<h1>Where are you now?</h1><p class="sub">Every journey starts from where you are. We look up your city once and keep it on this device to work out distances.</p>
+ <div class="pass"><div class="in"><button class="btn" id="geo">\u{1F4CD} Use my current location</button><p id="geomsg" class="sub" role="status" style="margin:10px 0 0"></p>
+ <label for="oc">Or choose your country</label><input id="oc" list="cl2" autocomplete="off" placeholder="e.g. India"><datalist id="cl2">${CT.map(c=>`<option value="${c[0]}">`).join("")}</datalist>
+ <label for="oci">City (optional)</label><input id="oci" placeholder="e.g. Mumbai"><button class="btn alt" id="setloc" style="margin-top:12px">Start from here</button>${O?'<button class="btn alt" id="keeploc" style="margin-top:8px">Cancel</button>':""}</div></div>`}
+const originBar=()=>`<div class="pass"><div class="in row"><span>\u{1F4CD} Starting from <b>${fe(flag(O.code))} ${esc(O.name)}${O.name!==O.country?", "+esc(O.country):""}</b></span><button class="btn alt" id="chloc" style="width:auto;padding:7px 12px">Change</button></div></div>`;
+
 const findC=s=>{s=(s||"").trim().toLowerCase();s=ALIAS[s]||s;return CT.find(c=>c[0].toLowerCase()===s)};
-function est(c){const D=Math.PI/180,[la,lo]=CITY.Paris,h=(x)=>Math.sin(x/2)**2,dl=(c[2]-la)*D,dn=(c[3]-lo)*D;const a=h(dl)+Math.cos(la*D)*Math.cos(c[2]*D)*h(dn);const km=12742*Math.asin(Math.sqrt(a));return Math.max(25,Math.round(km/850*60+30))}
+function est(c){const km=O?distKm(O.lat,O.lon,c[2],c[3]):0;return Math.max(25,Math.round(km/850*60+30))}
 let note="",fix=0,ccIn="";
 function board(force){
  subject=$("#sj").value;
  const q=findC($("#cc").value),m=+$("#cm").value;custom=$("#cm").value;ccIn=$("#cc").value;
+ if(!O){note="Set your starting location first.";fix=0;return render()}
  if(!q){note="Pick a country from the list so the flight time can be checked.";fix=0;return render()}
  if(!m||m<1){note="Enter how many minutes you want to study.";fix=0;return render()}
  const e=est(q);
- if(!force&&Math.abs(m-e)>Math.max(e*.3,15)){note=`Paris to ${q[0]} takes about ${hm(e)} by plane. You entered ${hm(m)}.`;fix=e;return render()}
- Object.assign(sel,{c:q[0],b:q[0],f:flag(q[1]),min:m});note="";fix=0;start();
+ if(!force&&Math.abs(m-e)>Math.max(e*.3,15)){note=`${O.name} to ${q[0]} takes about ${hm(e)} by plane. You entered ${hm(m)}.`;fix=e;return render()}
+ Object.assign(sel,{a:O.name,o:[O.lat,O.lon],d:[q[2],q[3]],c:q[0],b:q[0],f:flag(q[1]),min:m});note="";fix=0;start();
 }
 let LP={},G={lo:0,la:0,z:1,vx:0,vy:0,px:0,py:0},GP=0,GR=270;
 const SEAS=["47,45 50,47 53,46.5 53,44 51,42 52.5,40 53.8,37 51,36.7 49,38 49,40 48,41.5 47.5,43"];
@@ -131,7 +166,7 @@ function loop(t){
 }
 function drawGlobe(p){
  const cv=$("#globe");if(!cv)return;
- const g=cv.getContext("2d"),C=300,D=Math.PI/180,[a1,o1]=pt(J.r.a),[a2,o2]=pt(J.r.b);
+ const g=cv.getContext("2d"),C=300,D=Math.PI/180,[a1,o1]=J.r.o||pt(J.r.a),[a2,o2]=J.r.d||pt(J.r.b);
  g.setTransform(cv.width/600,0,0,cv.width/600,0,0);
  const v=(la,lo)=>[Math.cos(la*D)*Math.cos(lo*D),Math.cos(la*D)*Math.sin(lo*D),Math.sin(la*D)];
  const A=v(a1,o1),B=v(a2,o2),om=Math.acos(Math.max(-1,Math.min(1,A[0]*B[0]+A[1]*B[1]+A[2]*B[2])))||1e-6,sn=Math.sin(om),km=om*6371;
@@ -258,25 +293,26 @@ function render(){
  bind();
 }
 function plan(){
+ if(!O||locEdit)return placePicker();
  const modes=["Flight","Train","Bus","Short hop","Custom"];
- const list=mode==="Custom"?"":R.filter(r=>r.k===mode).map(r=>`<button class="route" data-r="${R.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${r.f} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
+ const list=mode==="Custom"?"":R.filter(r=>r.k===mode).map(r=>`<button class="route" data-r="${R.indexOf(r)}" aria-pressed="${sel===r}"><div class="row"><span><b>${r.m} ${r.a} to ${r.b}</b><small>${fe(r.f)} ${r.c}${S.friends[r.c]?" · "+esc(S.friends[r.c])+" is waiting":""}</small></span><b>${hm(r.min)}</b></div></button>`).join("");
  const cu=mode==="Custom"?`<div class="pass"><div class="in"><label for="cm">Study length in minutes</label><input id="cm" type="number" min="1" inputmode="numeric" value="${esc(custom)}"><label for="cc">Destination country</label><input id="cc" list="cl" autocomplete="off" value="${esc(ccIn)}" placeholder="e.g. Brazil"><datalist id="cl">${CT.map(c=>`<option value="${c[0]}">`).join("")}</datalist>${note?`<div class="crew" role="alert" style="margin:12px 0 0">${esc(note)}${fix?`<div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-fix="1">Use ${hm(fix)}</button><button class="btn alt" data-keep="1">Keep mine</button></div>`:""}</div>`:""}</div></div>`:"";
  const fr=sel.c&&!(mode==="Custom"&&!sel.c)?`<label for="fr">Friend in ${esc(sel.c)}</label><input id="fr" value="${esc(S.friends[sel.c]||"")}" placeholder="Name of the friend you’ll visit">`:"";
- return `<h1>Where to next?</h1><p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>
+ return `<h1>Where to next?</h1><p class="sub">Pick a trip. The trip time is your study time. Stay focused to land and earn a passport stamp.</p>${originBar()}
  <div class="tabs" role="group" aria-label="Transport">${modes.map(m=>`<button data-m="${m}" aria-pressed="${m===mode}">${m==="Flight"?"✈️":m==="Train"?"🚆":m==="Bus"?"🚌":m==="Short hop"?"🚲":"🧭"}<br>${m}</button>`).join("")}</div>
- ${list}${cu}
+ ${list||(mode==="Custom"?"":`<div class="pass"><div class="in">No ${mode.toLowerCase()} routes from ${esc(O.name)}. Try Flight or Custom.</div></div>`)}${cu}
  <div class="pass"><div class="in"><label for="sj">What are you studying?</label><input id="sj" value="${esc(subject)}" placeholder="e.g. Organic chemistry">${fr}</div></div>
  ${(()=>{const c=crew(false);return c?`<div class="crew">👩‍✈️ <b>Pre-boarding announcement:</b> ${esc(c)}</div>`:""})()}<button class="btn" id="go">Board now</button>`;
 }
 function trip(){
  if(arrived){const r=arrived.r,fr=S.friends[r.c];
-  return `<div class="modal"><div class="pass"><div class="in"><div class="land">${r.f}</div><h1>Landed in ${esc(r.b)}</h1><div class="slam">ARRIVED</div>
+  return `<div class="modal"><div class="pass"><div class="in"><div class="land">${fe(r.f)}</div><h1>Landed in ${esc(r.b)}</h1><div class="slam">ARRIVED</div>
   <p>You studied ${hm(r.min)} by ${r.k.toLowerCase()}${arrived.pauses?`, with ${arrived.pauses} pause${arrived.pauses>1?"s":""} and ${Math.round(arrived.delay/60000)} min of delay`:" with zero delays"}.</p>
   <p><b>${r.c} stamp added to your passport.</b></p>
   ${fr?`<p>🤝 ${esc(fr)} is waiting at arrivals.</p>`:`<p class="sub">Add a friend in ${esc(r.c)} from your passport.</p>`}
   ${(()=>{const c=crew(false);return c?`<div class="crew" style="text-align:left">👩‍✈️ ${esc(c)}</div>`:""})()}<button class="btn" id="ok">Plan next trip</button></div></div></div>`}
  if(!J)return `<h1>No trip in progress</h1><p class="sub">Check in to a trip first.</p><button class="btn" data-go="plan">Choose a trip</button>`;
- return `<h1>${J.r.m} ${esc(J.r.a)} to ${esc(J.r.b)}</h1><p class="sub">${J.subject?esc(J.subject)+" · ":""}${J.r.f} ${esc(J.r.c)}${S.friends[J.r.c]?" · "+esc(S.friends[J.r.c])+" is waiting":""}</p>
+ return `<h1>${J.r.m} ${esc(J.r.a)} to ${esc(J.r.b)}</h1><p class="sub">${J.subject?esc(J.subject)+" · ":""}${fe(J.r.f)} ${esc(J.r.c)}${S.friends[J.r.c]?" · "+esc(S.friends[J.r.c])+" is waiting":""}</p>
  <div class="pass"><div class="in">
  <div class="row"><span id="st"></span><span id="eta"></span></div>
  <canvas id="globe" width="900" height="900" role="img" aria-label="Globe showing your flight" style="width:100%;aspect-ratio:1;display:block;margin-top:12px;border-radius:12px;background:#0a1626;touch-action:none;cursor:grab"></canvas><div class="row" style="margin-top:8px"><small style="color:var(--mute)">Drag to rotate, pinch or scroll to zoom</small><button class="btn alt" id="rc" style="width:auto;padding:6px 12px;font-size:14px">Recenter</button></div>
@@ -304,7 +340,7 @@ function countryFlag(country, legacy="") {
  const entry=CT.find(x=>x[0].toLowerCase()===String(country).toLowerCase());
  const code=entry?.[1] || (/^[A-Z]{2}$/.test(String(legacy))?String(legacy):"");
  if(!code)return "🌍";
- return String.fromCodePoint(...[...code].map(ch=>127397+ch.charCodeAt(0)));
+ return fe(String.fromCodePoint(...[...code].map(ch=>127397+ch.charCodeAt(0))));
 }
 function leaderboardPanel(){
  return `<section class="pass leaderboard-card"><div class="in">
@@ -316,7 +352,7 @@ function leaderboardPanel(){
 
 function pass(){
  const cs=Object.keys(S.stamps),tot=Object.values(S.stamps).reduce((a,s)=>a+s.min,0),trips=Object.values(S.stamps).reduce((a,s)=>a+s.n,0);
- const all=[...new Set([...R.map(r=>r.c),...cs])];
+ const all=[...new Set([...Object.keys(S.friends||{}),...R.map(r=>r.c),...cs])];
  return `<h1>Passport</h1><p class="sub">${cs.length} countr${cs.length===1?"y":"ies"} · ${trips} trip${trips===1?"":"s"} · ${hm(tot)} studied</p>
  ${cs.length?`<div class="stamps">${cs.map(c=>`<div class="stamp"><span class="f" role="img" aria-label="${esc(c)} flag">${countryFlag(c,S.stamps[c].f)}</span><b>${esc(c)}</b><small>${S.stamps[c].n} visit${S.stamps[c].n>1?"s":""} · ${hm(S.stamps[c].min)}</small><small>${esc(S.stamps[c].last)}</small></div>`).join("")}</div>`:`<div class="pass"><div class="in">Your passport is empty. Finish a trip to get your first stamp.</div></div>`}
  <h1 style="font-size:20px;margin-top:22px">Friends abroad</h1><p class="sub">One friend per country. They’ll greet you when you land.</p>
@@ -345,7 +381,7 @@ function club(){
 async function fillLeaderboard(){const el=$("#leaderboard");if(!el)return;try{const d=await api("/api/leaderboard",{headers:{}});el.innerHTML=d.leaderboard.length?d.leaderboard.map((u,i)=>`<div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)"><span><b>#${i+1}</b> ${esc(u.username)}${account.user&&u.username===account.user.username?" (you)":""}</span><b>${hm(u.minutes)}</b></div>`).join(""):"No completed study trips yet. Be the first!";}catch(e){el.textContent=e.message.includes("not set up")?"Leaderboard will be available once the database is connected.":e.message}}
 
 function bind(){
- document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{mode=b.dataset.m;sel=mode==="Custom"?{custom:1,m:"🧭",k:"Custom",a:"Home",b:"Destination",c:"",f:"🌍",min:0}:R.find(r=>r.k===mode);render()});
+ document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{mode=b.dataset.m;sel=mode==="Custom"?{custom:1,m:"🧭",k:"Custom",a:O?O.name:"Home",o:O?[O.lat,O.lon]:null,b:"Destination",c:"",f:"🌍",min:0}:(R.find(r=>r.k===mode)||{});render()});
  document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{subject=$("#sj").value;sel=R[+b.dataset.r];render()});
  const go=$("#go");if(go)go.onclick=()=>{
   subject=$("#sj").value;
@@ -363,6 +399,10 @@ function bind(){
   cv.onpointerup=cv.onpointercancel=e=>{ps.delete(e.pointerId);pd=0;G.vx=G.px||0;G.vy=G.py||0;G.px=G.py=0};
   cv.onwheel=e=>{e.preventDefault();G.z=Math.max(.5,Math.min(4,G.z*(e.deltaY<0?1.1:.9)))};
   const rc=$("#rc");if(rc)rc.onclick=()=>{G.lo=0;G.la=0;G.z=1;G.vx=G.vy=0}}
+ const geo=$("#geo");if(geo)geo.onclick=locate;
+ const setloc=$("#setloc");if(setloc)setloc.onclick=()=>{const q=findC($("#oc").value),m=$("#geomsg");if(!q){m.textContent="Pick a country from the list.";return}setOrigin({name:$("#oci").value.trim()||q[0],country:q[0],code:q[1],lat:q[2],lon:q[3],gps:false})};
+ const chloc=$("#chloc");if(chloc)chloc.onclick=()=>{locEdit=true;render()};
+ const keeploc=$("#keeploc");if(keeploc)keeploc.onclick=()=>{locEdit=false;render()};
  const pz=$("#pz");if(pz)pz.onclick=pause;
  document.querySelectorAll("[data-snd]").forEach(b=>b.onclick=()=>{sound(b.dataset.snd);render()});
  const vl=$("#vol");if(vl)vl.oninput=()=>vol(+vl.value);
@@ -382,6 +422,7 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
  view=b.dataset.v;render()});
 function clearTrip(){stopSound();try{localStorage.removeItem("sj_trip")}catch(e){}}
 try{const t=JSON.parse(localStorage.getItem("sj_trip")||"null");if(t&&t.r&&t.total){J=t;if(!J.paused){J.paused=true;J.pausedAt=J.last||Date.now();J.pauses++}view="trip"}}catch(e){}
+buildRoutes();
 requestAnimationFrame(loop);
 setInterval(tick,500);
 render();
